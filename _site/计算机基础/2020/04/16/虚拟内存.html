@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="cn">
+  
+  <head>
+  <meta charset="UTF-8">
+  <title>张铁的博客</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#157878">
+  <link rel="stylesheet" href="/css/normalize.css">
+  <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" href="/css/cayman.css">
+</head>
+
+  <body>
+    <section class="page-header">
+  <h1 class="project-name">张铁的博客</h1>
+  <h2 class="project-tagline">基础知识/算法题/项目笔记</h2>
+  <!-- <a href="#" class="btn">View on GitHub</a>
+  <a href="#" class="btn">Download .zip</a>
+  <a href="#" class="btn">Download .tar.gz</a> -->
+</section>
+
+    <section class="main-content">
+      
+      <h2>CSAPP笔记：虚拟内存-概念</h2>
+<p class="meta">16 Apr 2020</p>
+
+<h1 id="虚拟内存概念">虚拟内存：概念</h1>
+
+<h2 id="地址空间">地址空间</h2>
+
+<h3 id="两种不同系统">两种不同系统</h3>
+
+<p>有一些系统如汽车，电梯内的控制设备，系统较简单，使用的是直接物理地址，CPU访问内存（main memory）时直接使用物理地址（physical address,PA),如下图所示：</p>
+
+<p><a href="https://imgchr.com/i/y2wySf"><img src="https://s3.ax1x.com/2021/02/17/y2wySf.png" alt="y2wySf.png" /></a></p>
+
+<p>服务器或者电脑上的系统，CPU访问内存时，使用的是虚拟地址（virtual address,VA），把VA发送给MMU（内存管理单元），进行地址转换（address translation），生成了PA，在从内存中取数据，发送给CPU。</p>
+
+<p><a href="https://imgchr.com/i/y2wrfP"><img src="https://s3.ax1x.com/2021/02/17/y2wrfP.png" alt="y2wrfP.png" /></a></p>
+
+<h3 id="地址空间术语">地址空间术语</h3>
+
+<ol>
+  <li>地址空间：整数地址的集合</li>
+  <li>线性地址空间：连续的非负整数地址集合</li>
+  <li>虚拟地址空间：大小为2^n的连续地址空间</li>
+  <li>物理地址空间：大小为2^m的连续地址空间</li>
+</ol>
+
+<p>一般来说，n&gt;m</p>
+
+<h3 id="为什么要使用虚拟内存">为什么要使用虚拟内存？</h3>
+
+<p>每次访问内存，都需要经过MMU来转换，这样难道不会降低效率吗？首先理解虚拟化：</p>
+
+<p><strong>虚拟化</strong>是指拦截对某个资源的访问权限，提供对资源的抽象，对用户展现不同视图，比如磁盘，通过磁盘管理器的虚拟化，CPU看到的只是连续的逻辑块，而不是磁盘，磁道这些物理设备，对磁盘的读写操作，被磁盘管理器拦截。</p>
+
+<p>使用虚拟内存的优点</p>
+
+<ol>
+  <li>能够更有效率的使用DRAM（因为DRAM也就是主存，称为了VM的cache）</li>
+  <li>能够简化内存管理（每个进程都有相似的连续地址空间）</li>
+  <li>能够帮助我们分离地址空间，实现数据保护（不同进程的虚拟内存是不一样的，用户程序不能访问内核的代码和数据）</li>
+</ol>
+
+<h2 id="虚拟内存作为缓存的工具">虚拟内存作为缓存的工具</h2>
+
+<h3 id="虚拟内存和物理内存">虚拟内存和物理内存</h3>
+
+<p>VM：长度为N的连续地址，存在磁盘上</p>
+
+<p>PM：作为VM的缓存，存在DRAM上</p>
+
+<p><a href="https://imgchr.com/i/y2wwTA"><img src="https://s3.ax1x.com/2021/02/17/y2wwTA.png" alt="y2wwTA.png" /></a></p>
+
+<p>可以发现：</p>
+
+<p>VM被很多块，被称为页面（pages），其中VM中的称为虚拟页面VP，被缓存在PM中的块称为物理页面，PP。</p>
+
+<p>页面的大小为2^p，通常比之前学到的缓存块大。（4096个字节，4kB）</p>
+
+<p>同时VM上还有一些页面是空的，称为未分配(unallocated)，也有些分配了但是没被缓存的（uncached）。</p>
+
+<h3 id="dram缓存">DRAM缓存</h3>
+
+<p>DRAM作为缓存，会有很严重的未命中惩罚，因为从磁盘取数据非常慢，所以我们采取以下措施，来提高命中率</p>
+
+<ol>
+  <li>使用大的cache block，称为页面（4KB/4MB）</li>
+  <li>完全关联性：任何的VP都有可能放在任何的PP，而不是像缓存那样有限制（需要map function）</li>
+  <li>非常复杂的替换算法：为了尽量减少未命中，不能简单的使用缓存那样的LCU算法（而且是在软件级实现）</li>
+  <li>不能使用直接写(write through)，使用回写（write back）</li>
+</ol>
+
+<h3 id="页表">页表</h3>
+
+<p>页表是由页表项组成（page table entries（PET））组成，每一个页表项都对应着一个（VM,PM）对（有效位为1时）</p>
+
+<h4 id="页表命中">页表命中</h4>
+
+<p>当CPU所需的虚拟地址在页表中能找到对应的PET，此时便可在DRAM中找到对应物理地址，从而page hit!</p>
+
+<p><a href="https://imgchr.com/i/y2wdwd"><img src="https://s3.ax1x.com/2021/02/17/y2wdwd.png" alt="y2wdwd.png" /></a></p>
+
+<h4 id="页缺失">页缺失</h4>
+
+<p>当CPU所需要的页面没有存放在DRAM中，发生了DRAM cache miss，如下图所示，当CPU要访问VP3时，有效位是0，此时会发生页缺失异常（page fault exception），控制权交给kernal的handler，handler选出DRAM中要被替换的PP（存在DRAM的VP）（此处选择VP4），然后PP3存放着VP3的数据，而VP4的PTE有效位为0，指向的是VM（也就是DISK）</p>
+
+<p><a href="https://imgchr.com/i/y2wNOe"><img src="https://s3.ax1x.com/2021/02/17/y2wNOe.png" alt="y2wNOe.png" /></a></p>
+
+<p><a href="https://imgchr.com/i/y2wDYt"><img src="https://s3.ax1x.com/2021/02/17/y2wDYt.png" alt="y2wDYt.png" /></a></p>
+
+<h4 id="页面分配">页面分配</h4>
+
+<p>原本未分配的页面如VP5，给他分配磁盘空间（如使用malloc），此空间会指向disk，而不是DRAM！！</p>
+
+<p><a href="https://imgchr.com/i/y2wtyD"><img src="https://s3.ax1x.com/2021/02/17/y2wtyD.png" alt="y2wtyD.png" /></a></p>
+
+<h4 id="局部性保证了虚拟内存性能">局部性保证了虚拟内存性能！</h4>
+
+<p>虚拟内存看上去会花费很多时间（每次都要查找PTE，还会引发demanding page），但是由于程序的局部性，程序总是趋向于访问一个<strong>较小的活动虚拟页面，称为工作集</strong>，当工作集比主存小时，此进程会有很好的性能。但是当所有进程工作集的大小比主存大时，可能会出现抖动（thrashing）（经常出现page falut exception）</p>
+
+<h2 id="虚拟内存作为内存管理的工具">虚拟内存作为内存管理的工具</h2>
+
+<ul>
+  <li>每个进程都有自己的虚拟内存，从而每个进程都把内存空间看做时连续的线性序列。</li>
+</ul>
+
+<p><a href="https://imgchr.com/i/y2wBFI"><img src="https://s3.ax1x.com/2021/02/17/y2wBFI.png" alt="y2wBFI.png" /></a></p>
+
+<ul>
+  <li>虚拟内存能够简化内存的分配：因为任何的VP都能匹配（map）到任何的PP，而且VP在不同的时刻可以在不同的PP内。</li>
+  <li>还能够实现多进程间数据共享，如上图的PP6（可能为lib.c），不需要复制，所有进程都能得到一份PP6内容的副本。</li>
+  <li>能够简化“链接”和“加载”过程
+    <ul>
+      <li>链接过程变得容易：因为所有的虚拟内存空间都在相同的地方开始（地址空间相同）</li>
+      <li>加载过程：让当前进程的PTEs无效（invalid），然后按需将新程序的.text和.data部分一页页地复制到当前进程地page table，从而实现当前进程能执行不同地程序。</li>
+    </ul>
+  </li>
+</ul>
+
+<p><a href="https://imgchr.com/i/y2waeH"><img src="https://s3.ax1x.com/2021/02/17/y2waeH.png" alt="y2waeH.png" /></a></p>
+
+<h2 id="虚拟内存作为内存保护的工具">虚拟内存作为内存保护的工具</h2>
+
+<p>PTE的每个条目之前都有一个“权限位”，说明目标PP是可读/可写/可执行等等。其中sup表示是内核程序还是用户程序。</p>
+
+<p><a href="https://imgchr.com/i/y2wYQO"><img src="https://s3.ax1x.com/2021/02/17/y2wYQO.png" alt="y2wYQO.png" /></a></p>
+
+<h2 id="地址转换">地址转换</h2>
+
+<h3 id="常用术语">常用术语</h3>
+
+<p>虚拟地址空间V；物理地址空间P，地址转换MAP(a) = a’（由虚拟地址a转换位物理地址a’）</p>
+
+<p>基本参数：</p>
+
+<ul>
+  <li>N：虚拟地址空间号</li>
+  <li>M：物理地址空间号</li>
+  <li>P：页大小</li>
+  <li>VA组成：
+    <ul>
+      <li>TLB：</li>
+      <li>TLBT</li>
+      <li>VPN：虚拟页面号</li>
+      <li>VPO：虚拟页面偏移量</li>
+    </ul>
+  </li>
+  <li>PA组成：
+    <ul>
+      <li>PPN：物理页面号</li>
+      <li>PPO：物理页面偏移量</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="利用page-table进行地址转换">利用page table进行地址转换</h3>
+
+<p>首先，当前进程有一个页面表指针存放在CR3这个寄存器中，用于页面表表项的查找，根据VPN，可以在页面表中查找到PPN（如果没有page fault的话)，而PPO和VPO是相同的，因为页面大小是相同的。</p>
+
+<p>而且，偏移量位数位P，因为页面大小最多位P位<strong>，当偏移量超过P，会在VPN中增加一位</strong>，表示进入了下一个页面。</p>
+
+<p><a href="https://imgchr.com/i/y2w8W6"><img src="https://s3.ax1x.com/2021/02/17/y2w8W6.png" alt="y2w8W6.png" /></a></p>
+
+<h3 id="地址转换过程page-hit">地址转换过程：page hit</h3>
+
+<p>可以发现PTE其实存在于主存或者缓存中，MMU先从主存或者缓存得到表项，然后计算出物理地址PA，再命令主存或者缓存将目标地址的数据发送给CPU。</p>
+
+<p><a href="https://imgchr.com/i/y2w3Jx"><img src="https://s3.ax1x.com/2021/02/17/y2w3Jx.png" alt="y2w3Jx.png" /></a></p>
+
+<h3 id="地址转换过程page-fault">地址转换过程：page fault</h3>
+
+<p>MMU得到的PTE发现有效位是0，引发了exception，挑选出victim（可能会回写），然后把需要的VP传到选好的PP，更新PTE，然后<strong>从新执行</strong>那条指令</p>
+
+<p><a href="https://imgchr.com/i/y2wJSK"><img src="https://s3.ax1x.com/2021/02/17/y2wJSK.png" alt="y2wJSK.png" /></a></p>
+
+<h3 id="地址转换过程缓存的作用">地址转换过程：缓存的作用</h3>
+
+<p><a href="https://imgchr.com/i/y2w1F1"><img src="https://s3.ax1x.com/2021/02/17/y2w1F1.png" alt="y2w1F1.png" /></a></p>
+
+<p>可以发现：缓存只是主存的子集而已。</p>
+
+<h3 id="使用tlb加速地址转换">使用TLB加速地址转换</h3>
+
+<p>PTE条目存放在缓存中，存在着缓存未命中风险，就算缓存命中，也就很小的L1级缓存延迟，为了加速对PTE的访问时间，MMU内部有一个硬件级的缓存，存放着最近访问的PTE条目，称为TLB（translation lookaside buffer)</p>
+
+<p>和访问主存的page table类似，也是使用VA的VPN作为索引来访问TLB，其中VPN分成了两部分，TLBI用于访问set，TLBT用于访问set中的某一列（跟普通的缓存一样的机制，也是<strong>硬件级的搜索</strong>）</p>
+
+<p><a href="https://imgchr.com/i/y2wMw9"><img src="https://s3.ax1x.com/2021/02/17/y2wMw9.png" alt="y2wMw9.png" /></a></p>
+
+<h4 id="tlb命中">TLB命中</h4>
+
+<p><a href="https://imgchr.com/i/y2wmyF"><img src="https://s3.ax1x.com/2021/02/17/y2wmyF.png" alt="y2wmyF.png" /></a></p>
+
+<p>可以发现：TLB命中时，减少了对内存的访问。</p>
+
+<h4 id="tlb未命中">TLB未命中</h4>
+
+<p><a href="https://imgchr.com/i/y2wnL4"><img src="https://s3.ax1x.com/2021/02/17/y2wnL4.png" alt="y2wnL4.png" /></a></p>
+
+<p>可以发现：TLB未命中和普通的在内存中查找PTE类似，只是会把未命中PTE在TLB中更新。</p>
+
+<h3 id="page-table存储">page table存储</h3>
+
+<p>假设页大小为4k，也就是2^12 bytes，64位系统一个可用地址为2^48，假设每个地址需要一个8 bytes的PTE存储，则一共需要2^48 / 2^12 *2^3 = 2^39 bytes，也就是512G来存储页表，这显然是不现实的，因为<strong>绝大部分的VM都没有使用</strong>，而不需要为这些没有使用的地址分配PTE。</p>
+
+<p>解决办法：采用多级页表</p>
+
+<p><a href="https://imgchr.com/i/y2wKeJ"><img src="https://s3.ax1x.com/2021/02/17/y2wKeJ.png" alt="y2wKeJ.png" /></a></p>
+
+<p>如上所示：存储一个VM，最终只用到了一个一级页表和3个二级页表，每个页表很小（4KB）。</p>
+
+<p><strong>使用多级页表时，MMU如何找到所需的PTE呢？</strong></p>
+
+<p>把VP中的VPN分成K等分，每一等分都可以帮助我们在第i级页表中找到下一级页表的<strong>头指针</strong>，最后一级页表，存的为所需的PTE，如下所示：</p>
+
+<p><a href="https://imgchr.com/i/y2weQU"><img src="https://s3.ax1x.com/2021/02/17/y2weQU.png" alt="y2weQU.png" /></a></p>
+
+<p>系统用几级页表，由硬件确定，intel好像用的是4级。</p>
+
+
+      <footer class="site-footer">
+  <span class="site-footer-owner"><a href="">张铁的博客</a> is maintained by <a href="http://yourhomepage.com">tie zhang</a>.</span>
+  <!-- <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a>.</span> -->
+</footer>
+
+
+    </section>
+
+  </body>
+</html>
