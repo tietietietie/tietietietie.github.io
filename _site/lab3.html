@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>6.824-lab3:KV server</title>
+
+  <!-- Begin Jekyll SEO tag v2.6.1 -->
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="6.824-lab3:KV server" />
+<meta name="author" content="tie" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Lab3 设计目标：实现可容错（复制）的K/V存储服务。 API：Key/Value均为String Put(key, value)：替换key对应的值为value Append(key, arg)：key对应的value值后面添加arg，key不存在时，等同于Put Get(key)：返回Key值对应的value，不存在时返回empty string 性能：提供强一致性 Lab3A Client如何将操作发送给Server：通过一个Clerk代理，Clerk尝试与不同server进行RPC调用，直到找到leader. K/V servers之间是否需要通信？ 不需要，通过底层的raft实现一致性即可，server只需要执行applyCh 需要实现的代码 Client端和Server端的RPC结构 定义Op结构体，来描述Put/Append/Get操作。（当Op被commit时，便可以返回RPC调用了） Start()：传入了一个Op(一个Log?)，开始达成一致性 难点 保证每一个Clerk op只被执行一次：给op分配一个unique ID Leader failure问题 old leader如何发现自己失去了leadership？自己的term已经改变？或者当前Index出出现了新的request leader在提交了此次commit后failure了，如何保证clerk不会重复提交request？通过比较LastApplyedEntry的opID与此次的opID。 代码 Clerk Struct: 包括所有K/V server的地址，以及最新处理完成的opID，以及上次RPC时连接的leaderID，以及锁（保证opID的原子性更新），以及这个clerk所对用的client。 GetArgs:除了Key之外，还需要唯一的opID和clientID。 Get:第一次尝试连接的serverID初始化为上次RPC成功的leaderID，RPC的timeout时间设置为40ms，根据reply.Err判断是否操作成功。不需要判断RPC是否超时，因为RPC本身能够保证。（通过返回的bool ok） PutArgs：与GetArgs类似。 AppendPut RPC代码类似 KVServer Struct:定义一个k/value表格（map) 修Bug 根据打印的日志发现，opID会突然从某个值变为1，而不是预想的一直单调加1 可能会出现多个clerk，此时不能通过单一的opID的增减，来判断是否有重复值，所以增加了ClientID这个变量 opID不需要每次都加1，随机生成一个值即可 由于在clerk端通过锁，处理完一个op才能处理下一个，只需要保存上次处理opID的值，即可判断是否有重复opID opID除了在Get/Append等函数需要判断外，还需要在executeOP()处判断，因为有可能clerk向leader发送了两次同样的op 存在竞争问题：通过引入”github.com/sasha-s/go-deadlock”，发现在Put函数中，执行了kv.Lock()后，会卡在kv.rf.GetState()位置 因为在rf.GetState()中需要rf锁，而rf此时正在rf.applyCh &lt;-位置，需要kv锁，互相等待。 需要在Get()/Put()等的无限循环中周期性释放锁，便于lastAppliedOpID[clientID]的更新，以及检查rf（kv.rf.GetState()） 注意一定要在return前面加上rf.mu.Unlock()来释放锁！ 使用外部库来检测死锁。 Lab3B: log compaction 过程 KVServer检测到maxraftstate小于 persister.RaftStateSize()，生成snapshot —&gt; 将snapshot传输给raft，raft根据情况删除logEntries ，并调用persister.SaveStateAndSnapshot()保存snapshot。 需要实现的代码 KVServer部分 在每次执行完applyChan时，检查raft的大小 如果需要saveSnapshot，则生成data(encode之后的bytes类型)（包括了kv表以及client[lastAppliedOpID]），以及进行快照的logIndex，然后调用raft.SavePersistAndSnapshot() 实现ReadPersisit()，在KVServer启动时执行，传入的数据为kv.persister.ReadSnapShot，根据bytes类型的data，对kv表和lastAppliedOpID更新 1) 修改ApplyOp, 因为此时得到的applyMsg并不一定包含了op，可能是snapshot的那个entry（增加判断） 2）增加两个方法：kv.readPersist() / kv.getPersist(), 需要保存的持久化数据为：dict/lastAppliedOpID 3) 在installSnapshot后（无论是自己主动或者是leader要求），当前的server一定会产生一个entry为lastSnapshotIndex，不包含command，这是我们需要利用这个entry，提醒server你的snapshot更新啦，去读取它吧（无法确定是自己生成的snapshot还是安装的leader的） Raft部分 当调用raft.SavePersistAndShnapshot()时，需要获得当前raft的state(bytes)，以及snapshot，然后调用persister.SaveStateAndSnapShot() 修改persist(),持久化的state得加上lastSnapshotIndex和lastSnapshotTerm 修改raft struct，加上lastSnapshotIndex和lastSnapshotTerm 修改appendEntries，需要判断args.lastLogIndex和当前raft的lastSnapShotIdnex，如果小于，return false， 修改appendEntries的args.lastLogIndex，不能通过logEntries长度直接获得，得加上lastSnapshotIndex 修改appendEntries的返回，reply.nextIndex可能会小于lastSnapshotIndex，此时调用InstallSnapShot 完成installSnapShot的RPCg installSnapShot的时候，不会使logEntries长度为0，从而总是可以通过访问最后一个元素的Index和term，得到lastLogIndex lastLogTerm,怎么做到？ 自己创建一个新的entry!! 1）修改struct和persisit()和readPersist() 2）添加getLastLogIndexAndTerm()，获得真实的lastIndex和term 3）修改logEntries[i]以及通过len(rf.logEntries)-1获得lastLogEntryIndex的位置 4）rf.lastSnapShotIndex的值初始化为0 5）实现IntallSnapShot RPC 修Bug 1） raft完成一次commit的时间过长，需要使用channel通知，把原raft所有涉及时间的操作几乎都改了一遍。 2）applyCh &lt;- 不能加锁，所以提交ApplyMsg时，先生成一个数组，把要提交的操作先收集起来，释放锁，在一起传给channel 3）同理notifyApplyCh也不能加锁 4）通过报错，修改数组越界的情况，主要是检查index和lastSnapShot的关系，因为重启会使index变小，导致index-lastSnapShot越界。" />
+<meta property="og:description" content="Lab3 设计目标：实现可容错（复制）的K/V存储服务。 API：Key/Value均为String Put(key, value)：替换key对应的值为value Append(key, arg)：key对应的value值后面添加arg，key不存在时，等同于Put Get(key)：返回Key值对应的value，不存在时返回empty string 性能：提供强一致性 Lab3A Client如何将操作发送给Server：通过一个Clerk代理，Clerk尝试与不同server进行RPC调用，直到找到leader. K/V servers之间是否需要通信？ 不需要，通过底层的raft实现一致性即可，server只需要执行applyCh 需要实现的代码 Client端和Server端的RPC结构 定义Op结构体，来描述Put/Append/Get操作。（当Op被commit时，便可以返回RPC调用了） Start()：传入了一个Op(一个Log?)，开始达成一致性 难点 保证每一个Clerk op只被执行一次：给op分配一个unique ID Leader failure问题 old leader如何发现自己失去了leadership？自己的term已经改变？或者当前Index出出现了新的request leader在提交了此次commit后failure了，如何保证clerk不会重复提交request？通过比较LastApplyedEntry的opID与此次的opID。 代码 Clerk Struct: 包括所有K/V server的地址，以及最新处理完成的opID，以及上次RPC时连接的leaderID，以及锁（保证opID的原子性更新），以及这个clerk所对用的client。 GetArgs:除了Key之外，还需要唯一的opID和clientID。 Get:第一次尝试连接的serverID初始化为上次RPC成功的leaderID，RPC的timeout时间设置为40ms，根据reply.Err判断是否操作成功。不需要判断RPC是否超时，因为RPC本身能够保证。（通过返回的bool ok） PutArgs：与GetArgs类似。 AppendPut RPC代码类似 KVServer Struct:定义一个k/value表格（map) 修Bug 根据打印的日志发现，opID会突然从某个值变为1，而不是预想的一直单调加1 可能会出现多个clerk，此时不能通过单一的opID的增减，来判断是否有重复值，所以增加了ClientID这个变量 opID不需要每次都加1，随机生成一个值即可 由于在clerk端通过锁，处理完一个op才能处理下一个，只需要保存上次处理opID的值，即可判断是否有重复opID opID除了在Get/Append等函数需要判断外，还需要在executeOP()处判断，因为有可能clerk向leader发送了两次同样的op 存在竞争问题：通过引入”github.com/sasha-s/go-deadlock”，发现在Put函数中，执行了kv.Lock()后，会卡在kv.rf.GetState()位置 因为在rf.GetState()中需要rf锁，而rf此时正在rf.applyCh &lt;-位置，需要kv锁，互相等待。 需要在Get()/Put()等的无限循环中周期性释放锁，便于lastAppliedOpID[clientID]的更新，以及检查rf（kv.rf.GetState()） 注意一定要在return前面加上rf.mu.Unlock()来释放锁！ 使用外部库来检测死锁。 Lab3B: log compaction 过程 KVServer检测到maxraftstate小于 persister.RaftStateSize()，生成snapshot —&gt; 将snapshot传输给raft，raft根据情况删除logEntries ，并调用persister.SaveStateAndSnapshot()保存snapshot。 需要实现的代码 KVServer部分 在每次执行完applyChan时，检查raft的大小 如果需要saveSnapshot，则生成data(encode之后的bytes类型)（包括了kv表以及client[lastAppliedOpID]），以及进行快照的logIndex，然后调用raft.SavePersistAndSnapshot() 实现ReadPersisit()，在KVServer启动时执行，传入的数据为kv.persister.ReadSnapShot，根据bytes类型的data，对kv表和lastAppliedOpID更新 1) 修改ApplyOp, 因为此时得到的applyMsg并不一定包含了op，可能是snapshot的那个entry（增加判断） 2）增加两个方法：kv.readPersist() / kv.getPersist(), 需要保存的持久化数据为：dict/lastAppliedOpID 3) 在installSnapshot后（无论是自己主动或者是leader要求），当前的server一定会产生一个entry为lastSnapshotIndex，不包含command，这是我们需要利用这个entry，提醒server你的snapshot更新啦，去读取它吧（无法确定是自己生成的snapshot还是安装的leader的） Raft部分 当调用raft.SavePersistAndShnapshot()时，需要获得当前raft的state(bytes)，以及snapshot，然后调用persister.SaveStateAndSnapShot() 修改persist(),持久化的state得加上lastSnapshotIndex和lastSnapshotTerm 修改raft struct，加上lastSnapshotIndex和lastSnapshotTerm 修改appendEntries，需要判断args.lastLogIndex和当前raft的lastSnapShotIdnex，如果小于，return false， 修改appendEntries的args.lastLogIndex，不能通过logEntries长度直接获得，得加上lastSnapshotIndex 修改appendEntries的返回，reply.nextIndex可能会小于lastSnapshotIndex，此时调用InstallSnapShot 完成installSnapShot的RPCg installSnapShot的时候，不会使logEntries长度为0，从而总是可以通过访问最后一个元素的Index和term，得到lastLogIndex lastLogTerm,怎么做到？ 自己创建一个新的entry!! 1）修改struct和persisit()和readPersist() 2）添加getLastLogIndexAndTerm()，获得真实的lastIndex和term 3）修改logEntries[i]以及通过len(rf.logEntries)-1获得lastLogEntryIndex的位置 4）rf.lastSnapShotIndex的值初始化为0 5）实现IntallSnapShot RPC 修Bug 1） raft完成一次commit的时间过长，需要使用channel通知，把原raft所有涉及时间的操作几乎都改了一遍。 2）applyCh &lt;- 不能加锁，所以提交ApplyMsg时，先生成一个数组，把要提交的操作先收集起来，释放锁，在一起传给channel 3）同理notifyApplyCh也不能加锁 4）通过报错，修改数组越界的情况，主要是检查index和lastSnapShot的关系，因为重启会使index变小，导致index-lastSnapShot越界。" />
+<link rel="canonical" href="https://github.com/tietietietie/tietietietie.github.io/lab3.html" />
+<meta property="og:url" content="https://github.com/tietietietie/tietietietie.github.io/lab3.html" />
+<meta property="og:site_name" content="tie’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-11-30T08:27:00+08:00" />
+<script type="application/ld+json">
+{"url":"https://github.com/tietietietie/tietietietie.github.io/lab3.html","headline":"6.824-lab3:KV server","dateModified":"2020-11-30T08:27:00+08:00","datePublished":"2020-11-30T08:27:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://github.com/tietietietie/tietietietie.github.io/lab3.html"},"author":{"@type":"Person","name":"tie"},"description":"Lab3 设计目标：实现可容错（复制）的K/V存储服务。 API：Key/Value均为String Put(key, value)：替换key对应的值为value Append(key, arg)：key对应的value值后面添加arg，key不存在时，等同于Put Get(key)：返回Key值对应的value，不存在时返回empty string 性能：提供强一致性 Lab3A Client如何将操作发送给Server：通过一个Clerk代理，Clerk尝试与不同server进行RPC调用，直到找到leader. K/V servers之间是否需要通信？ 不需要，通过底层的raft实现一致性即可，server只需要执行applyCh 需要实现的代码 Client端和Server端的RPC结构 定义Op结构体，来描述Put/Append/Get操作。（当Op被commit时，便可以返回RPC调用了） Start()：传入了一个Op(一个Log?)，开始达成一致性 难点 保证每一个Clerk op只被执行一次：给op分配一个unique ID Leader failure问题 old leader如何发现自己失去了leadership？自己的term已经改变？或者当前Index出出现了新的request leader在提交了此次commit后failure了，如何保证clerk不会重复提交request？通过比较LastApplyedEntry的opID与此次的opID。 代码 Clerk Struct: 包括所有K/V server的地址，以及最新处理完成的opID，以及上次RPC时连接的leaderID，以及锁（保证opID的原子性更新），以及这个clerk所对用的client。 GetArgs:除了Key之外，还需要唯一的opID和clientID。 Get:第一次尝试连接的serverID初始化为上次RPC成功的leaderID，RPC的timeout时间设置为40ms，根据reply.Err判断是否操作成功。不需要判断RPC是否超时，因为RPC本身能够保证。（通过返回的bool ok） PutArgs：与GetArgs类似。 AppendPut RPC代码类似 KVServer Struct:定义一个k/value表格（map) 修Bug 根据打印的日志发现，opID会突然从某个值变为1，而不是预想的一直单调加1 可能会出现多个clerk，此时不能通过单一的opID的增减，来判断是否有重复值，所以增加了ClientID这个变量 opID不需要每次都加1，随机生成一个值即可 由于在clerk端通过锁，处理完一个op才能处理下一个，只需要保存上次处理opID的值，即可判断是否有重复opID opID除了在Get/Append等函数需要判断外，还需要在executeOP()处判断，因为有可能clerk向leader发送了两次同样的op 存在竞争问题：通过引入”github.com/sasha-s/go-deadlock”，发现在Put函数中，执行了kv.Lock()后，会卡在kv.rf.GetState()位置 因为在rf.GetState()中需要rf锁，而rf此时正在rf.applyCh &lt;-位置，需要kv锁，互相等待。 需要在Get()/Put()等的无限循环中周期性释放锁，便于lastAppliedOpID[clientID]的更新，以及检查rf（kv.rf.GetState()） 注意一定要在return前面加上rf.mu.Unlock()来释放锁！ 使用外部库来检测死锁。 Lab3B: log compaction 过程 KVServer检测到maxraftstate小于 persister.RaftStateSize()，生成snapshot —&gt; 将snapshot传输给raft，raft根据情况删除logEntries ，并调用persister.SaveStateAndSnapshot()保存snapshot。 需要实现的代码 KVServer部分 在每次执行完applyChan时，检查raft的大小 如果需要saveSnapshot，则生成data(encode之后的bytes类型)（包括了kv表以及client[lastAppliedOpID]），以及进行快照的logIndex，然后调用raft.SavePersistAndSnapshot() 实现ReadPersisit()，在KVServer启动时执行，传入的数据为kv.persister.ReadSnapShot，根据bytes类型的data，对kv表和lastAppliedOpID更新 1) 修改ApplyOp, 因为此时得到的applyMsg并不一定包含了op，可能是snapshot的那个entry（增加判断） 2）增加两个方法：kv.readPersist() / kv.getPersist(), 需要保存的持久化数据为：dict/lastAppliedOpID 3) 在installSnapshot后（无论是自己主动或者是leader要求），当前的server一定会产生一个entry为lastSnapshotIndex，不包含command，这是我们需要利用这个entry，提醒server你的snapshot更新啦，去读取它吧（无法确定是自己生成的snapshot还是安装的leader的） Raft部分 当调用raft.SavePersistAndShnapshot()时，需要获得当前raft的state(bytes)，以及snapshot，然后调用persister.SaveStateAndSnapShot() 修改persist(),持久化的state得加上lastSnapshotIndex和lastSnapshotTerm 修改raft struct，加上lastSnapshotIndex和lastSnapshotTerm 修改appendEntries，需要判断args.lastLogIndex和当前raft的lastSnapShotIdnex，如果小于，return false， 修改appendEntries的args.lastLogIndex，不能通过logEntries长度直接获得，得加上lastSnapshotIndex 修改appendEntries的返回，reply.nextIndex可能会小于lastSnapshotIndex，此时调用InstallSnapShot 完成installSnapShot的RPCg installSnapShot的时候，不会使logEntries长度为0，从而总是可以通过访问最后一个元素的Index和term，得到lastLogIndex lastLogTerm,怎么做到？ 自己创建一个新的entry!! 1）修改struct和persisit()和readPersist() 2）添加getLastLogIndexAndTerm()，获得真实的lastIndex和term 3）修改logEntries[i]以及通过len(rf.logEntries)-1获得lastLogEntryIndex的位置 4）rf.lastSnapShotIndex的值初始化为0 5）实现IntallSnapShot RPC 修Bug 1） raft完成一次commit的时间过长，需要使用channel通知，把原raft所有涉及时间的操作几乎都改了一遍。 2）applyCh &lt;- 不能加锁，所以提交ApplyMsg时，先生成一个数组，把要提交的操作先收集起来，释放锁，在一起传给channel 3）同理notifyApplyCh也不能加锁 4）通过报错，修改数组越界的情况，主要是检查index和lastSnapShot的关系，因为重启会使index变小，导致index-lastSnapShot越界。","@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  <link type="application/atom+xml" rel="alternate" href="https://github.com/tietietietie/tietietietie.github.io/feed.xml" title="tie's blog" />
+
+  <link rel="shortcut icon" type="image/x-icon" href="/logo.png" />
+  <link rel="stylesheet" href="/assets/css/main.css" />
+</head><body a="auto">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        <a href="/">..</a>
+
+<article>
+  <p class="post-meta">
+    <time datetime="2020-11-30 08:27:00 +0800">2020-11-30</time>
+  </p>
+  
+  <h1>6.824-lab3:KV server</h1>
+
+  <h1 id="lab3">Lab3</h1>
+
+<ul>
+  <li>设计目标：实现可容错（复制）的K/V存储服务。</li>
+  <li>API：Key/Value均为String
+    <ul>
+      <li>Put(key, value)：替换key对应的值为value</li>
+      <li>Append(key, arg)：key对应的value值后面添加arg，key不存在时，等同于Put</li>
+      <li>Get(key)：返回Key值对应的value，不存在时返回empty string</li>
+    </ul>
+  </li>
+  <li>性能：提供强一致性</li>
+</ul>
+
+<h2 id="lab3a">Lab3A</h2>
+
+<ul>
+  <li>Client如何将操作发送给Server：通过一个Clerk代理，Clerk尝试与不同server进行RPC调用，直到找到leader.</li>
+  <li>K/V servers之间是否需要通信？ 不需要，通过底层的raft实现一致性即可，server只需要执行applyCh</li>
+</ul>
+
+<h3 id="需要实现的代码">需要实现的代码</h3>
+
+<ul>
+  <li>Client端和Server端的RPC结构</li>
+  <li>定义Op结构体，来描述Put/Append/Get操作。（当Op被commit时，便可以返回RPC调用了）</li>
+  <li>Start()：传入了一个Op(一个Log?)，开始达成一致性</li>
+</ul>
+
+<h3 id="难点">难点</h3>
+
+<ul>
+  <li>保证每一个Clerk op只被执行一次：给op分配一个unique ID</li>
+  <li>Leader failure问题
+    <ul>
+      <li>old leader如何发现自己失去了leadership？自己的term已经改变？或者当前Index出出现了新的request</li>
+      <li>leader在提交了此次commit后failure了，如何保证clerk不会重复提交request？通过比较LastApplyedEntry的opID与此次的opID。</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="代码">代码</h3>
+
+<p><strong>Clerk Struct</strong>: 包括所有K/V server的地址，以及最新处理完成的opID，以及上次RPC时连接的leaderID，以及锁（保证opID的原子性更新），以及这个clerk所对用的client。</p>
+
+<p><strong>GetArgs</strong>:除了Key之外，还需要唯一的opID和clientID。</p>
+
+<p><strong>Get</strong>:第一次尝试连接的serverID初始化为上次RPC成功的leaderID，<del>RPC的timeout时间设置为40ms</del>，根据reply.Err判断是否操作成功。不需要判断RPC是否超时，因为RPC本身能够保证。（通过返回的bool ok）</p>
+
+<p><strong>PutArgs</strong>：与GetArgs类似。</p>
+
+<p><strong>AppendPut RPC代码类似</strong></p>
+
+<p><strong>KVServer Struct</strong>:定义一个k/value表格（map)</p>
+
+<h3 id="修bug">修Bug</h3>
+
+<ul>
+  <li>根据打印的日志发现，opID会突然从某个值变为1，而不是预想的一直单调加1</li>
+</ul>
+
+<p>可能会出现多个clerk，此时不能通过单一的opID的增减，来判断是否有重复值，所以增加了ClientID这个变量</p>
+
+<ul>
+  <li>opID不需要每次都加1，随机生成一个值即可</li>
+</ul>
+
+<p>由于在clerk端通过锁，处理完一个op才能处理下一个，只需要保存上次处理opID的值，即可判断是否有重复opID</p>
+
+<ul>
+  <li>opID除了在Get/Append等函数需要判断外，还需要在executeOP()处判断，因为有可能clerk向leader发送了两次同样的op</li>
+  <li>存在竞争问题：通过引入”github.com/sasha-s/go-deadlock”，发现在Put函数中，执行了kv.Lock()后，会卡在kv.rf.GetState()位置</li>
+</ul>
+
+<p>因为在rf.GetState()中需要rf锁，而rf此时正在rf.applyCh &lt;-位置，需要kv锁，互相等待。</p>
+
+<ul>
+  <li>需要在Get()/Put()等的无限循环中周期性释放锁，便于lastAppliedOpID[clientID]的更新，以及检查rf（kv.rf.GetState()）</li>
+  <li>注意一定要在return前面加上rf.mu.Unlock()来释放锁！</li>
+  <li>使用外部库来检测死锁。</li>
+</ul>
+
+<h2 id="lab3b-log-compaction">Lab3B: log compaction</h2>
+
+<h3 id="过程">过程</h3>
+
+<p>KVServer检测到maxraftstate小于 persister.RaftStateSize()，生成snapshot  —&gt; 将snapshot传输给raft，raft根据情况删除logEntries ，并调用persister.SaveStateAndSnapshot()保存snapshot。</p>
+
+<h3 id="需要实现的代码-1">需要实现的代码</h3>
+
+<p><strong>KVServer部分</strong></p>
+
+<ul>
+  <li>在每次执行完applyChan时，检查raft的大小</li>
+  <li>如果需要saveSnapshot，则生成data(encode之后的bytes类型)（包括了kv表以及client[lastAppliedOpID]），以及进行快照的logIndex，然后调用raft.SavePersistAndSnapshot()</li>
+  <li>实现ReadPersisit()，在KVServer启动时执行，传入的数据为kv.persister.ReadSnapShot，根据bytes类型的data，对kv表和lastAppliedOpID更新</li>
+</ul>
+
+<p>1) 修改ApplyOp, 因为此时得到的applyMsg并不一定包含了op，可能是snapshot的那个entry（增加判断）</p>
+
+<p>2）增加两个方法：kv.readPersist() / kv.getPersist(), 需要保存的持久化数据为：dict/lastAppliedOpID</p>
+
+<p>3) 在installSnapshot后（无论是自己主动或者是leader要求），当前的server一定会产生一个entry为lastSnapshotIndex，不包含command，这是我们需要利用这个entry，提醒server你的snapshot更新啦，去读取它吧（无法确定是自己生成的snapshot还是安装的leader的）</p>
+
+<p><strong>Raft部分</strong></p>
+
+<ul>
+  <li>当调用raft.SavePersistAndShnapshot()时，需要获得当前raft的state(bytes)，以及snapshot，然后调用persister.SaveStateAndSnapShot()</li>
+  <li>修改persist(),持久化的state得加上lastSnapshotIndex和lastSnapshotTerm</li>
+  <li>修改raft struct，加上lastSnapshotIndex和lastSnapshotTerm</li>
+  <li>修改appendEntries，需要判断args.lastLogIndex和当前raft的lastSnapShotIdnex，如果小于，return false，</li>
+  <li>修改appendEntries的args.lastLogIndex，不能通过logEntries长度直接获得，得加上lastSnapshotIndex</li>
+  <li>修改appendEntries的返回，reply.nextIndex可能会小于lastSnapshotIndex，此时调用InstallSnapShot</li>
+  <li>完成installSnapShot的RPCg</li>
+  <li>installSnapShot的时候，不会使logEntries长度为0，从而<strong>总是可以通过访问最后一个元素</strong>的Index和term，得到lastLogIndex lastLogTerm,怎么做到？ 自己创建一个新的entry!!</li>
+</ul>
+
+<p>1）修改struct和persisit()和readPersist()</p>
+
+<p>2）<del>添加getLastLogIndexAndTerm()，获得真实的lastIndex和term</del></p>
+
+<p>3）修改logEntries[i]以及通过len(rf.logEntries)-1获得lastLogEntryIndex的位置</p>
+
+<p>4）rf.lastSnapShotIndex的值初始化为0</p>
+
+<p>5）实现IntallSnapShot RPC</p>
+
+<h3 id="修bug-1">修Bug</h3>
+
+<p>1） raft完成一次commit的时间过长，需要使用channel通知，把原raft所有涉及时间的操作几乎都改了一遍。</p>
+
+<p>2）applyCh &lt;- 不能加锁，所以提交ApplyMsg时，先生成一个数组，把要提交的操作先收集起来，释放锁，在一起传给channel</p>
+
+<p>3）同理notifyApplyCh也不能加锁</p>
+
+<p>4）通过报错，修改数组越界的情况，主要是检查index和lastSnapShot的关系，因为重启会使index变小，导致index-lastSnapShot越界。</p>
+
+</article>
+      </div>
+    </main>
+
+    
+  </body>
+</html>

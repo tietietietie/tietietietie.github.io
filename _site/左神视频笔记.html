@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>左神算法课笔记</title>
+
+  <!-- Begin Jekyll SEO tag v2.6.1 -->
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="左神算法课笔记" />
+<meta name="author" content="tie" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="左神视频笔记" />
+<meta property="og:description" content="左神视频笔记" />
+<link rel="canonical" href="https://github.com/tietietietie/tietietietie.github.io/%E5%B7%A6%E7%A5%9E%E8%A7%86%E9%A2%91%E7%AC%94%E8%AE%B0.html" />
+<meta property="og:url" content="https://github.com/tietietietie/tietietietie.github.io/%E5%B7%A6%E7%A5%9E%E8%A7%86%E9%A2%91%E7%AC%94%E8%AE%B0.html" />
+<meta property="og:site_name" content="tie’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-08-05T07:46:00+08:00" />
+<script type="application/ld+json">
+{"url":"https://github.com/tietietietie/tietietietie.github.io/%E5%B7%A6%E7%A5%9E%E8%A7%86%E9%A2%91%E7%AC%94%E8%AE%B0.html","headline":"左神算法课笔记","dateModified":"2020-08-05T07:46:00+08:00","datePublished":"2020-08-05T07:46:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://github.com/tietietietie/tietietietie.github.io/%E5%B7%A6%E7%A5%9E%E8%A7%86%E9%A2%91%E7%AC%94%E8%AE%B0.html"},"author":{"@type":"Person","name":"tie"},"description":"左神视频笔记","@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  <link type="application/atom+xml" rel="alternate" href="https://github.com/tietietietie/tietietietie.github.io/feed.xml" title="tie's blog" />
+
+  <link rel="shortcut icon" type="image/x-icon" href="/logo.png" />
+  <link rel="stylesheet" href="/assets/css/main.css" />
+</head><body a="auto">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        <a href="/">..</a>
+
+<article>
+  <p class="post-meta">
+    <time datetime="2020-08-05 07:46:00 +0800">2020-08-05</time>
+  </p>
+  
+  <h1>左神算法课笔记</h1>
+
+  <h1 id="左神视频笔记">左神视频笔记</h1>
+
+<h2 id="lecture01">Lecture01</h2>
+
+<h3 id="kmp">KMP</h3>
+
+<p>str2如果包含在str1中，返回str1的开始的位置。O(N)</p>
+
+<ul>
+  <li>子序列：可以不连续，子串/子数组：连续</li>
+  <li>KMP：子串匹配问题</li>
+</ul>
+
+<p><strong>概念建设</strong>：某字符的前面字符的最长前缀和最长后缀相等的最长长度？举例：abcabcd,字符串的前缀和后缀的最长相等长度为3(abc == abc)</p>
+
+<p>1) 求prefixArr[],保存str[i]右侧的最长前后缀长度</p>
+
+<p>2） 从左到右遍历str1，i与match比较，如果相等 match++ 并判断match == len(str2), 如果不等，则不断减小match= next[mathch]</p>
+
+<p><strong>正确性证明</strong>：在计算next[i]是，为什么可以直接将tail移动到next[tail]?可以画图反证。</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">private</span> <span class="kt">int</span> <span class="nf">kmp</span><span class="o">(</span><span class="nc">String</span> <span class="n">str1</span><span class="o">,</span> <span class="nc">String</span> <span class="n">str2</span><span class="o">)</span> <span class="o">{</span>
+    <span class="kt">int</span> <span class="n">len</span> <span class="o">=</span> <span class="n">str2</span><span class="o">.</span><span class="na">length</span><span class="o">();</span>
+    
+    <span class="kt">int</span><span class="o">[]</span> <span class="n">next</span> <span class="o">=</span> <span class="k">new</span> <span class="kt">int</span><span class="o">[</span><span class="n">len</span><span class="o">];</span>
+    <span class="n">next</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="o">;</span>
+    <span class="k">for</span><span class="o">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">len</span><span class="o">;</span> <span class="n">i</span><span class="o">++)</span> <span class="o">{</span>
+        <span class="kt">int</span> <span class="n">tail</span> <span class="o">=</span> <span class="n">next</span><span class="o">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="o">];</span>
+        <span class="k">while</span><span class="o">(</span><span class="n">tail</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">tail</span><span class="o">)</span> <span class="o">!=</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">i</span><span class="o">))</span>
+            <span class="n">tail</span> <span class="o">=</span> <span class="n">next</span><span class="o">[</span><span class="n">tail</span><span class="o">];</span>
+        <span class="n">next</span><span class="o">[</span><span class="n">i</span><span class="o">]</span> <span class="o">=</span> <span class="n">tail</span> <span class="o">+</span> <span class="mi">1</span><span class="o">;</span>
+    <span class="o">}</span>
+    
+    <span class="kt">int</span> <span class="n">match</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span>
+    <span class="k">for</span><span class="o">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">str1</span><span class="o">.</span><span class="na">length</span><span class="o">();</span> <span class="n">i</span><span class="o">++)</span> <span class="o">{</span>
+        <span class="k">while</span><span class="o">(</span><span class="n">match</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">str1</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">i</span><span class="o">)</span> <span class="o">!=</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">match</span><span class="o">))</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">next</span><span class="o">[</span><span class="n">match</span><span class="o">];</span>
+        <span class="k">if</span><span class="o">(</span><span class="n">str1</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">i</span><span class="o">)</span> <span class="o">==</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">match</span><span class="o">))</span> <span class="o">{</span>
+            <span class="n">match</span><span class="o">++;</span>
+            <span class="k">if</span><span class="o">(</span><span class="n">match</span> <span class="o">==</span> <span class="n">len</span><span class="o">)</span>
+                <span class="k">return</span> <span class="n">i</span> <span class="o">-</span> <span class="n">len</span> <span class="o">+</span> <span class="mi">1</span><span class="o">;</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+    
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p><strong>改进</strong>：next[i]表示从[0, i]的最长相同前后缀长度，此时tail = next[tail - 1], j表示pattern中正在与str1比较的字符</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">private</span> <span class="kt">int</span> <span class="nf">kmp</span><span class="o">(</span><span class="nc">String</span> <span class="n">str1</span><span class="o">,</span> <span class="nc">String</span> <span class="n">str2</span><span class="o">)</span> <span class="o">{</span>
+    <span class="kt">int</span> <span class="n">len</span> <span class="o">=</span> <span class="n">str2</span><span class="o">.</span><span class="na">length</span><span class="o">();</span>
+    
+    <span class="kt">int</span><span class="o">[]</span> <span class="n">next</span> <span class="o">=</span> <span class="k">new</span> <span class="kt">int</span><span class="o">[</span><span class="n">len</span><span class="o">];</span>
+    <span class="n">next</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span>
+    <span class="k">for</span><span class="o">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">len</span><span class="o">;</span> <span class="n">i</span><span class="o">++)</span> <span class="o">{</span>
+        <span class="kt">int</span> <span class="n">tail</span> <span class="o">=</span> <span class="n">next</span><span class="o">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="o">];</span>
+        <span class="k">while</span><span class="o">(</span><span class="n">tail</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">tail</span><span class="o">)</span> <span class="o">!=</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">i</span><span class="o">))</span>
+            <span class="n">tail</span> <span class="o">=</span> <span class="n">next</span><span class="o">[</span><span class="n">tail</span> <span class="o">-</span> <span class="mi">1</span><span class="o">];</span>
+        <span class="k">if</span><span class="o">(</span><span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">tail</span><span class="o">)</span> <span class="o">==</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">i</span><span class="o">))</span> <span class="n">next</span><span class="o">[</span><span class="n">i</span><span class="o">]</span> <span class="o">=</span> <span class="n">tail</span> <span class="o">+</span> <span class="mi">1</span><span class="o">;</span>
+    <span class="o">}</span>
+    
+    <span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span>
+    <span class="k">for</span><span class="o">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">str1</span><span class="o">.</span><span class="na">length</span><span class="o">();</span> <span class="n">i</span><span class="o">++)</span> <span class="o">{</span>
+        <span class="k">while</span><span class="o">(</span><span class="n">j</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">str1</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">i</span><span class="o">)</span> <span class="o">!=</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">j</span><span class="o">))</span>
+            <span class="n">j</span> <span class="o">=</span> <span class="n">next</span><span class="o">[</span><span class="n">j</span><span class="o">-</span><span class="mi">1</span><span class="o">];</span>
+        <span class="k">if</span><span class="o">(</span><span class="n">str1</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">i</span><span class="o">)</span> <span class="o">==</span> <span class="n">str2</span><span class="o">.</span><span class="na">charAt</span><span class="o">(</span><span class="n">j</span><span class="o">))</span> <span class="o">{</span>
+            <span class="n">j</span><span class="o">++;</span>
+            <span class="k">if</span><span class="o">(</span><span class="n">j</span> <span class="o">==</span> <span class="n">len</span><span class="o">)</span>
+                <span class="k">return</span> <span class="n">i</span> <span class="o">-</span> <span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="o">;</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+    
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+
+</article>
+      </div>
+    </main>
+
+    
+  </body>
+</html>

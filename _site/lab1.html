@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>6.824-lab1:MapReduce</title>
+
+  <!-- Begin Jekyll SEO tag v2.6.1 -->
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="6.824-lab1:MapReduce" />
+<meta name="author" content="tie" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="lab1 实验环境：WSL:Ubuntu 18.04 + VsCode 1，理解题意 阅读提供的代码，理解功能 mcsequential.go 定义ByKey用来排序“中间键值对” 定义loadPlugin()函数来读取os.Args[1]中的map函数和reduce函数 程序执行流程 打开文件，将文件名和文件内容（都是字符串），传入map函数中，产生kva键值对，将每个文件产生的kva都添加到中间键值对中。（类似于”apple” : “1”, “banana” : 1, “apple” : “1”) 将中间键值对按照ByKey排序，并指定一个output文件。os.Create(oname) 将排序后的中间键值对去重，得到每一个key和对应的values，类似于(“apple” : “1”, “1”)，并传入reduce函数中，reduce函数统计每个key出现的次数，输出output（“2”）。 最后程序将（key, output）写入文件。 mrmaster 传入master所需要的文件（多个）以及reduce个数 m := mr.MakeMaster(os.Args[1:], 10) 利用master的Done函数，每隔一秒检查worker是否全部完成 for m.Done() == false { time.Sleep(time.Second) } mrworker 传入map函数和reduce函数，创建worker mapf, reducef := loadPlugin(os.Args[1]) mr.Worker(mapf, reducef) master 定义Master结构体（my code） 定义RPC handler来处理worker的请求 定义一个server，启动net.listen，注册rpc服务，来处理所有rpc请求(只需要调用) 定义一个makeMaster，用来创建master进程（my code) 定义Done函数，表明job完成了 rpc 定义rpc变量，注意要全部大写开头(my code) worker KeyValue结构体，存放key 和 value 都是 string ihash:根据key，产生一个int，用来指派reduce（用来确定） 定义Worker函数，传入mapf和reducef两个函数，(mycode) 定义call函数，可以向master通过rpc发送信息 a few rules 注意输出文件格式 步骤 定义worker的call函数，向master请求一个任务。 定义master的响应函数，将未处理的文件交给worker处理。 定义中间键名称 mr-X-Y,其中X为Map task number, Y为reduce task number 可以利用Go的json包，把中间键值对存储为json格式文件 使用iHash()函数，帮助选择对应的reduce wiker master是并发的，注意锁定共享变量。 每10秒检测一次worker是否完成，如果没有完成，则放弃这个worker。 2，配置实验环境 实验环境：WSL（ubuntu 18.04) + VSCode 安装Go 1.13，并解压到/usr/local路径 sudo tar -zxvf go1.13.6.linux-amd64.tar.gz -C /usr/local 添加环境变量，参考这里 安装GIt，报错： Could not get lock /var/lib/dpkg/lock-frontend - open (11: Resource temporarly unavailable) 解决办法： sudo rm /var/lib/dpkg/lock sudo rm /var/lib/dpkg/lock-frontend 注意：不要安装VSCode的插件，因为无法下载，还会导致go tool运行出错。 3，MapReduce实现 数据结构定义/函数功能介绍/文件功能介绍 Task （Struct） taskType, filaName, taskId（非常重要，在执行map任务时，取值为(0~n-1)能帮助我们确定需要处理的中间键文件名称，在执行reduce任务时（取值0~m-1)，能帮助我们找到所需的中间值文件），mapCount(执行reduceFunction要用）， reduceCount（执行mapFunction的时候要用）workerID(因为可能出现两个worker执行相同任务的情况，此时任务是否完成，应该以master中任务的workerID确定）。 TaskState (Struct) 包括：任务状态：入队？超时？错误？已完成？（0，1，2，3） 任务执行ID：workerID 任务开始执行时间 Worker.go 作用：申请/执行任务 worker结构体：包括mapF和reduceF, ID 申请WorkerID —&gt; 申请任务 —&gt; 判断任务类型 —&gt; 执行对应任务 — &gt; 通知master执行的状态 —&gt; 申请任务 Master.go 作用：调度/分配任务 1, 每个一段时间，检查所有任务的状态：包括判断所有任务已完成？将执行太久的任务/报错的任务重新放入准备任务队列 ​ 1）如果map任务全部完成，则启动reduce任务 ​ 2）如果reduce任务全部完成，则将Done参数设置为true 2，Master结构体：存放着所有需要共享的变量，包括：master当前管理的任务类型（map/reduce），所有任务的状态（入队？已完成？在执行？故障？）（用一个数组存储，index是TaskId(0~n-1, 0~m-1)， value是taskState，四种），Done：表示全部任务（map and reduce）已完成，files(输入文件)， nReduece(切片数量)， 互斥锁。 3，执行过程：启动所有map任务（入队） —&gt; 将管道中的任务分配给woker —&gt; 每隔一定时间检查所有任务状态，处理超时/失败任务，重新入队，如果已完成 —&gt; 启动所有的reduce任务 —&gt; 将管道中的任务分配给worker —&gt;一定时间检查任务状态，如何任务全部完成 —&gt; Done = true 4，分配任务：收到任务请求（RPC) —&gt; 在管道中获取任务 —&gt; 处理任务（包括确定此任务workerID，改变任务状态，确定此任务的开始时间） —&gt; 将任务分配给worker 5，标记任务完成：收到任务完成请求 —&gt; 判断当前m.taskPhase和args.taskPhase是否对应，workerId是否对应（因为可能有非常慢的worker） —&gt; 标记任务状态为已完成 代码 初始化map任务 将Master结构初始化，确定files和nReduce，并且开启Map任务 请求任务 func (w *worker) requestTask() Task { args := RequestTaskArgs{} args.WorkerID = w.workerID reply := RequestTaskReply{} if ok := call(&quot;Master.AssignOneTask&quot;, &amp;args, &amp;reply); !ok { log.Println(&quot;worker %d cannot request a task&quot;, w.workerID) os.Exit(1) } return *reply.Task } worker在请求任务中，需要判断ok的值，不然worker永远无法退出？或者连接超时？反正有Bug，无法通过。 注册Worker func (w *worker) register() { args := RegisterArgs{} reply := RegisterReply{} call(&quot;Master.RegisterWorker&quot;, &amp;args, &amp;reply) w.workerID = reply.WorkerID } 报告任务完成 args: 任务类型， 任务ID， 是否完成， workerID 将master的任务标记为已完成，需要满足：任务类型和当前Master处理的任务类型一致，workerID与master中的任务状态的workerID一致，并且报告的是已完成 执行map任务 mapf(args1, args2) : args1 : fileName, args2 : content， res : key-value数组 将key/value数组分成nReduce份，分别存储在mr-X-Y名称的文件中 执行reduce任务 reduce() 读取所有的中间键值对文件，全部存入一个地方（kva） —&gt; 将相同的key聚合在一起（map)（key, values) —&gt; 对每个key进行reduce操作 将reduece结果整理到res中，并统一写入到mr-out-*文件中，一行行的写入是有问题的，不知道为啥 正确代码： func (w *worker) execReduceTask(task Task) { maps := make(map[string][]string) for idx := 0; idx &lt; task.MapCount; idx++ { fileName := fmt.Sprintf(&quot;mr-%d-%d&quot;, idx, task.ID) file, err := os.Open(fileName) if err != nil { w.reportTask(task, false) return } dec := json.NewDecoder(file) for { var kv KeyValue if err := dec.Decode(&amp;kv); err != nil { break } if _, ok := maps[kv.Key]; !ok { maps[kv.Key] = make([]string, 0, 100) } maps[kv.Key] = append(maps[kv.Key], kv.Value) } } //指定slice的长度和容量 res := make([]string, 0, 100) for k, v := range maps { res = append(res, fmt.Sprintf(&quot;%v %v\n&quot;, k, w.reducef(k, v))) } if err := ioutil.WriteFile(fmt.Sprintf(&quot;mr-out-%d&quot;, task.ID), []byte(strings.Join(res, &quot;&quot;)), 0666); err != nil { w.reportTask(task, false) } w.reportTask(task, true) } 有BUG的代码 kvs := make(map[string][]string) for i := 0; i &lt; task.MapCount; i++ { fileName := fmt.Sprintf(&quot;mr-%d-%d&quot;, i, task.ID) file, err := os.Open(fileName) if err != nil { log.Fatalf(&quot;cannot open reduceFile %v&quot;, fileName) w.reportTask(task, false) return } dec := json.NewDecoder(file) for { var kv KeyValue err := dec.Decode(&amp;kv) if err != nil { break } //判断key是否存在于kvs if _, ok := kvs[kv.Key]; !ok { kvs[kv.Key] = make([]string, 0) } kvs[kv.Key] = append(kvs[kv.Key], kv.Value) } } //将reduce结果存入文件 fileName := fmt.Sprintf(&quot;mr-out-%d&quot;, task.ID) file, err := os.Create(fileName) if err != nil { log.Fatalf(&quot;cannot create %v&quot;, fileName) w.reportTask(task, false) } for key, values := range kvs { _, err := file.WriteString(fmt.Sprintf(&quot;%v %v/n&quot;, key, w.reducef(key, values))) if err != nil { log.Fatalf(&quot;cannot write string in %v&quot;, fileName) w.reportTask(task, false) } } w.reportTask(task, true) 测试结果 sh test-mr.sh 通过所有测试，但是会有：Unexpected EOF提示。" />
+<meta property="og:description" content="lab1 实验环境：WSL:Ubuntu 18.04 + VsCode 1，理解题意 阅读提供的代码，理解功能 mcsequential.go 定义ByKey用来排序“中间键值对” 定义loadPlugin()函数来读取os.Args[1]中的map函数和reduce函数 程序执行流程 打开文件，将文件名和文件内容（都是字符串），传入map函数中，产生kva键值对，将每个文件产生的kva都添加到中间键值对中。（类似于”apple” : “1”, “banana” : 1, “apple” : “1”) 将中间键值对按照ByKey排序，并指定一个output文件。os.Create(oname) 将排序后的中间键值对去重，得到每一个key和对应的values，类似于(“apple” : “1”, “1”)，并传入reduce函数中，reduce函数统计每个key出现的次数，输出output（“2”）。 最后程序将（key, output）写入文件。 mrmaster 传入master所需要的文件（多个）以及reduce个数 m := mr.MakeMaster(os.Args[1:], 10) 利用master的Done函数，每隔一秒检查worker是否全部完成 for m.Done() == false { time.Sleep(time.Second) } mrworker 传入map函数和reduce函数，创建worker mapf, reducef := loadPlugin(os.Args[1]) mr.Worker(mapf, reducef) master 定义Master结构体（my code） 定义RPC handler来处理worker的请求 定义一个server，启动net.listen，注册rpc服务，来处理所有rpc请求(只需要调用) 定义一个makeMaster，用来创建master进程（my code) 定义Done函数，表明job完成了 rpc 定义rpc变量，注意要全部大写开头(my code) worker KeyValue结构体，存放key 和 value 都是 string ihash:根据key，产生一个int，用来指派reduce（用来确定） 定义Worker函数，传入mapf和reducef两个函数，(mycode) 定义call函数，可以向master通过rpc发送信息 a few rules 注意输出文件格式 步骤 定义worker的call函数，向master请求一个任务。 定义master的响应函数，将未处理的文件交给worker处理。 定义中间键名称 mr-X-Y,其中X为Map task number, Y为reduce task number 可以利用Go的json包，把中间键值对存储为json格式文件 使用iHash()函数，帮助选择对应的reduce wiker master是并发的，注意锁定共享变量。 每10秒检测一次worker是否完成，如果没有完成，则放弃这个worker。 2，配置实验环境 实验环境：WSL（ubuntu 18.04) + VSCode 安装Go 1.13，并解压到/usr/local路径 sudo tar -zxvf go1.13.6.linux-amd64.tar.gz -C /usr/local 添加环境变量，参考这里 安装GIt，报错： Could not get lock /var/lib/dpkg/lock-frontend - open (11: Resource temporarly unavailable) 解决办法： sudo rm /var/lib/dpkg/lock sudo rm /var/lib/dpkg/lock-frontend 注意：不要安装VSCode的插件，因为无法下载，还会导致go tool运行出错。 3，MapReduce实现 数据结构定义/函数功能介绍/文件功能介绍 Task （Struct） taskType, filaName, taskId（非常重要，在执行map任务时，取值为(0~n-1)能帮助我们确定需要处理的中间键文件名称，在执行reduce任务时（取值0~m-1)，能帮助我们找到所需的中间值文件），mapCount(执行reduceFunction要用）， reduceCount（执行mapFunction的时候要用）workerID(因为可能出现两个worker执行相同任务的情况，此时任务是否完成，应该以master中任务的workerID确定）。 TaskState (Struct) 包括：任务状态：入队？超时？错误？已完成？（0，1，2，3） 任务执行ID：workerID 任务开始执行时间 Worker.go 作用：申请/执行任务 worker结构体：包括mapF和reduceF, ID 申请WorkerID —&gt; 申请任务 —&gt; 判断任务类型 —&gt; 执行对应任务 — &gt; 通知master执行的状态 —&gt; 申请任务 Master.go 作用：调度/分配任务 1, 每个一段时间，检查所有任务的状态：包括判断所有任务已完成？将执行太久的任务/报错的任务重新放入准备任务队列 ​ 1）如果map任务全部完成，则启动reduce任务 ​ 2）如果reduce任务全部完成，则将Done参数设置为true 2，Master结构体：存放着所有需要共享的变量，包括：master当前管理的任务类型（map/reduce），所有任务的状态（入队？已完成？在执行？故障？）（用一个数组存储，index是TaskId(0~n-1, 0~m-1)， value是taskState，四种），Done：表示全部任务（map and reduce）已完成，files(输入文件)， nReduece(切片数量)， 互斥锁。 3，执行过程：启动所有map任务（入队） —&gt; 将管道中的任务分配给woker —&gt; 每隔一定时间检查所有任务状态，处理超时/失败任务，重新入队，如果已完成 —&gt; 启动所有的reduce任务 —&gt; 将管道中的任务分配给worker —&gt;一定时间检查任务状态，如何任务全部完成 —&gt; Done = true 4，分配任务：收到任务请求（RPC) —&gt; 在管道中获取任务 —&gt; 处理任务（包括确定此任务workerID，改变任务状态，确定此任务的开始时间） —&gt; 将任务分配给worker 5，标记任务完成：收到任务完成请求 —&gt; 判断当前m.taskPhase和args.taskPhase是否对应，workerId是否对应（因为可能有非常慢的worker） —&gt; 标记任务状态为已完成 代码 初始化map任务 将Master结构初始化，确定files和nReduce，并且开启Map任务 请求任务 func (w *worker) requestTask() Task { args := RequestTaskArgs{} args.WorkerID = w.workerID reply := RequestTaskReply{} if ok := call(&quot;Master.AssignOneTask&quot;, &amp;args, &amp;reply); !ok { log.Println(&quot;worker %d cannot request a task&quot;, w.workerID) os.Exit(1) } return *reply.Task } worker在请求任务中，需要判断ok的值，不然worker永远无法退出？或者连接超时？反正有Bug，无法通过。 注册Worker func (w *worker) register() { args := RegisterArgs{} reply := RegisterReply{} call(&quot;Master.RegisterWorker&quot;, &amp;args, &amp;reply) w.workerID = reply.WorkerID } 报告任务完成 args: 任务类型， 任务ID， 是否完成， workerID 将master的任务标记为已完成，需要满足：任务类型和当前Master处理的任务类型一致，workerID与master中的任务状态的workerID一致，并且报告的是已完成 执行map任务 mapf(args1, args2) : args1 : fileName, args2 : content， res : key-value数组 将key/value数组分成nReduce份，分别存储在mr-X-Y名称的文件中 执行reduce任务 reduce() 读取所有的中间键值对文件，全部存入一个地方（kva） —&gt; 将相同的key聚合在一起（map)（key, values) —&gt; 对每个key进行reduce操作 将reduece结果整理到res中，并统一写入到mr-out-*文件中，一行行的写入是有问题的，不知道为啥 正确代码： func (w *worker) execReduceTask(task Task) { maps := make(map[string][]string) for idx := 0; idx &lt; task.MapCount; idx++ { fileName := fmt.Sprintf(&quot;mr-%d-%d&quot;, idx, task.ID) file, err := os.Open(fileName) if err != nil { w.reportTask(task, false) return } dec := json.NewDecoder(file) for { var kv KeyValue if err := dec.Decode(&amp;kv); err != nil { break } if _, ok := maps[kv.Key]; !ok { maps[kv.Key] = make([]string, 0, 100) } maps[kv.Key] = append(maps[kv.Key], kv.Value) } } //指定slice的长度和容量 res := make([]string, 0, 100) for k, v := range maps { res = append(res, fmt.Sprintf(&quot;%v %v\n&quot;, k, w.reducef(k, v))) } if err := ioutil.WriteFile(fmt.Sprintf(&quot;mr-out-%d&quot;, task.ID), []byte(strings.Join(res, &quot;&quot;)), 0666); err != nil { w.reportTask(task, false) } w.reportTask(task, true) } 有BUG的代码 kvs := make(map[string][]string) for i := 0; i &lt; task.MapCount; i++ { fileName := fmt.Sprintf(&quot;mr-%d-%d&quot;, i, task.ID) file, err := os.Open(fileName) if err != nil { log.Fatalf(&quot;cannot open reduceFile %v&quot;, fileName) w.reportTask(task, false) return } dec := json.NewDecoder(file) for { var kv KeyValue err := dec.Decode(&amp;kv) if err != nil { break } //判断key是否存在于kvs if _, ok := kvs[kv.Key]; !ok { kvs[kv.Key] = make([]string, 0) } kvs[kv.Key] = append(kvs[kv.Key], kv.Value) } } //将reduce结果存入文件 fileName := fmt.Sprintf(&quot;mr-out-%d&quot;, task.ID) file, err := os.Create(fileName) if err != nil { log.Fatalf(&quot;cannot create %v&quot;, fileName) w.reportTask(task, false) } for key, values := range kvs { _, err := file.WriteString(fmt.Sprintf(&quot;%v %v/n&quot;, key, w.reducef(key, values))) if err != nil { log.Fatalf(&quot;cannot write string in %v&quot;, fileName) w.reportTask(task, false) } } w.reportTask(task, true) 测试结果 sh test-mr.sh 通过所有测试，但是会有：Unexpected EOF提示。" />
+<link rel="canonical" href="https://github.com/tietietietie/tietietietie.github.io/lab1.html" />
+<meta property="og:url" content="https://github.com/tietietietie/tietietietie.github.io/lab1.html" />
+<meta property="og:site_name" content="tie’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-09-02T06:27:00+08:00" />
+<script type="application/ld+json">
+{"url":"https://github.com/tietietietie/tietietietie.github.io/lab1.html","headline":"6.824-lab1:MapReduce","dateModified":"2020-09-02T06:27:00+08:00","datePublished":"2020-09-02T06:27:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://github.com/tietietietie/tietietietie.github.io/lab1.html"},"author":{"@type":"Person","name":"tie"},"description":"lab1 实验环境：WSL:Ubuntu 18.04 + VsCode 1，理解题意 阅读提供的代码，理解功能 mcsequential.go 定义ByKey用来排序“中间键值对” 定义loadPlugin()函数来读取os.Args[1]中的map函数和reduce函数 程序执行流程 打开文件，将文件名和文件内容（都是字符串），传入map函数中，产生kva键值对，将每个文件产生的kva都添加到中间键值对中。（类似于”apple” : “1”, “banana” : 1, “apple” : “1”) 将中间键值对按照ByKey排序，并指定一个output文件。os.Create(oname) 将排序后的中间键值对去重，得到每一个key和对应的values，类似于(“apple” : “1”, “1”)，并传入reduce函数中，reduce函数统计每个key出现的次数，输出output（“2”）。 最后程序将（key, output）写入文件。 mrmaster 传入master所需要的文件（多个）以及reduce个数 m := mr.MakeMaster(os.Args[1:], 10) 利用master的Done函数，每隔一秒检查worker是否全部完成 for m.Done() == false { time.Sleep(time.Second) } mrworker 传入map函数和reduce函数，创建worker mapf, reducef := loadPlugin(os.Args[1]) mr.Worker(mapf, reducef) master 定义Master结构体（my code） 定义RPC handler来处理worker的请求 定义一个server，启动net.listen，注册rpc服务，来处理所有rpc请求(只需要调用) 定义一个makeMaster，用来创建master进程（my code) 定义Done函数，表明job完成了 rpc 定义rpc变量，注意要全部大写开头(my code) worker KeyValue结构体，存放key 和 value 都是 string ihash:根据key，产生一个int，用来指派reduce（用来确定） 定义Worker函数，传入mapf和reducef两个函数，(mycode) 定义call函数，可以向master通过rpc发送信息 a few rules 注意输出文件格式 步骤 定义worker的call函数，向master请求一个任务。 定义master的响应函数，将未处理的文件交给worker处理。 定义中间键名称 mr-X-Y,其中X为Map task number, Y为reduce task number 可以利用Go的json包，把中间键值对存储为json格式文件 使用iHash()函数，帮助选择对应的reduce wiker master是并发的，注意锁定共享变量。 每10秒检测一次worker是否完成，如果没有完成，则放弃这个worker。 2，配置实验环境 实验环境：WSL（ubuntu 18.04) + VSCode 安装Go 1.13，并解压到/usr/local路径 sudo tar -zxvf go1.13.6.linux-amd64.tar.gz -C /usr/local 添加环境变量，参考这里 安装GIt，报错： Could not get lock /var/lib/dpkg/lock-frontend - open (11: Resource temporarly unavailable) 解决办法： sudo rm /var/lib/dpkg/lock sudo rm /var/lib/dpkg/lock-frontend 注意：不要安装VSCode的插件，因为无法下载，还会导致go tool运行出错。 3，MapReduce实现 数据结构定义/函数功能介绍/文件功能介绍 Task （Struct） taskType, filaName, taskId（非常重要，在执行map任务时，取值为(0~n-1)能帮助我们确定需要处理的中间键文件名称，在执行reduce任务时（取值0~m-1)，能帮助我们找到所需的中间值文件），mapCount(执行reduceFunction要用）， reduceCount（执行mapFunction的时候要用）workerID(因为可能出现两个worker执行相同任务的情况，此时任务是否完成，应该以master中任务的workerID确定）。 TaskState (Struct) 包括：任务状态：入队？超时？错误？已完成？（0，1，2，3） 任务执行ID：workerID 任务开始执行时间 Worker.go 作用：申请/执行任务 worker结构体：包括mapF和reduceF, ID 申请WorkerID —&gt; 申请任务 —&gt; 判断任务类型 —&gt; 执行对应任务 — &gt; 通知master执行的状态 —&gt; 申请任务 Master.go 作用：调度/分配任务 1, 每个一段时间，检查所有任务的状态：包括判断所有任务已完成？将执行太久的任务/报错的任务重新放入准备任务队列 ​ 1）如果map任务全部完成，则启动reduce任务 ​ 2）如果reduce任务全部完成，则将Done参数设置为true 2，Master结构体：存放着所有需要共享的变量，包括：master当前管理的任务类型（map/reduce），所有任务的状态（入队？已完成？在执行？故障？）（用一个数组存储，index是TaskId(0~n-1, 0~m-1)， value是taskState，四种），Done：表示全部任务（map and reduce）已完成，files(输入文件)， nReduece(切片数量)， 互斥锁。 3，执行过程：启动所有map任务（入队） —&gt; 将管道中的任务分配给woker —&gt; 每隔一定时间检查所有任务状态，处理超时/失败任务，重新入队，如果已完成 —&gt; 启动所有的reduce任务 —&gt; 将管道中的任务分配给worker —&gt;一定时间检查任务状态，如何任务全部完成 —&gt; Done = true 4，分配任务：收到任务请求（RPC) —&gt; 在管道中获取任务 —&gt; 处理任务（包括确定此任务workerID，改变任务状态，确定此任务的开始时间） —&gt; 将任务分配给worker 5，标记任务完成：收到任务完成请求 —&gt; 判断当前m.taskPhase和args.taskPhase是否对应，workerId是否对应（因为可能有非常慢的worker） —&gt; 标记任务状态为已完成 代码 初始化map任务 将Master结构初始化，确定files和nReduce，并且开启Map任务 请求任务 func (w *worker) requestTask() Task { args := RequestTaskArgs{} args.WorkerID = w.workerID reply := RequestTaskReply{} if ok := call(&quot;Master.AssignOneTask&quot;, &amp;args, &amp;reply); !ok { log.Println(&quot;worker %d cannot request a task&quot;, w.workerID) os.Exit(1) } return *reply.Task } worker在请求任务中，需要判断ok的值，不然worker永远无法退出？或者连接超时？反正有Bug，无法通过。 注册Worker func (w *worker) register() { args := RegisterArgs{} reply := RegisterReply{} call(&quot;Master.RegisterWorker&quot;, &amp;args, &amp;reply) w.workerID = reply.WorkerID } 报告任务完成 args: 任务类型， 任务ID， 是否完成， workerID 将master的任务标记为已完成，需要满足：任务类型和当前Master处理的任务类型一致，workerID与master中的任务状态的workerID一致，并且报告的是已完成 执行map任务 mapf(args1, args2) : args1 : fileName, args2 : content， res : key-value数组 将key/value数组分成nReduce份，分别存储在mr-X-Y名称的文件中 执行reduce任务 reduce() 读取所有的中间键值对文件，全部存入一个地方（kva） —&gt; 将相同的key聚合在一起（map)（key, values) —&gt; 对每个key进行reduce操作 将reduece结果整理到res中，并统一写入到mr-out-*文件中，一行行的写入是有问题的，不知道为啥 正确代码： func (w *worker) execReduceTask(task Task) { maps := make(map[string][]string) for idx := 0; idx &lt; task.MapCount; idx++ { fileName := fmt.Sprintf(&quot;mr-%d-%d&quot;, idx, task.ID) file, err := os.Open(fileName) if err != nil { w.reportTask(task, false) return } dec := json.NewDecoder(file) for { var kv KeyValue if err := dec.Decode(&amp;kv); err != nil { break } if _, ok := maps[kv.Key]; !ok { maps[kv.Key] = make([]string, 0, 100) } maps[kv.Key] = append(maps[kv.Key], kv.Value) } } //指定slice的长度和容量 res := make([]string, 0, 100) for k, v := range maps { res = append(res, fmt.Sprintf(&quot;%v %v\\n&quot;, k, w.reducef(k, v))) } if err := ioutil.WriteFile(fmt.Sprintf(&quot;mr-out-%d&quot;, task.ID), []byte(strings.Join(res, &quot;&quot;)), 0666); err != nil { w.reportTask(task, false) } w.reportTask(task, true) } 有BUG的代码 kvs := make(map[string][]string) for i := 0; i &lt; task.MapCount; i++ { fileName := fmt.Sprintf(&quot;mr-%d-%d&quot;, i, task.ID) file, err := os.Open(fileName) if err != nil { log.Fatalf(&quot;cannot open reduceFile %v&quot;, fileName) w.reportTask(task, false) return } dec := json.NewDecoder(file) for { var kv KeyValue err := dec.Decode(&amp;kv) if err != nil { break } //判断key是否存在于kvs if _, ok := kvs[kv.Key]; !ok { kvs[kv.Key] = make([]string, 0) } kvs[kv.Key] = append(kvs[kv.Key], kv.Value) } } //将reduce结果存入文件 fileName := fmt.Sprintf(&quot;mr-out-%d&quot;, task.ID) file, err := os.Create(fileName) if err != nil { log.Fatalf(&quot;cannot create %v&quot;, fileName) w.reportTask(task, false) } for key, values := range kvs { _, err := file.WriteString(fmt.Sprintf(&quot;%v %v/n&quot;, key, w.reducef(key, values))) if err != nil { log.Fatalf(&quot;cannot write string in %v&quot;, fileName) w.reportTask(task, false) } } w.reportTask(task, true) 测试结果 sh test-mr.sh 通过所有测试，但是会有：Unexpected EOF提示。","@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  <link type="application/atom+xml" rel="alternate" href="https://github.com/tietietietie/tietietietie.github.io/feed.xml" title="tie's blog" />
+
+  <link rel="shortcut icon" type="image/x-icon" href="/logo.png" />
+  <link rel="stylesheet" href="/assets/css/main.css" />
+</head><body a="auto">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        <a href="/">..</a>
+
+<article>
+  <p class="post-meta">
+    <time datetime="2020-09-02 06:27:00 +0800">2020-09-02</time>
+  </p>
+  
+  <h1>6.824-lab1:MapReduce</h1>
+
+  <h1 id="lab1">lab1</h1>
+
+<p>实验环境：WSL:Ubuntu 18.04  + VsCode</p>
+
+<h2 id="1理解题意">1，理解题意</h2>
+
+<p>阅读提供的代码，理解功能</p>
+
+<h3 id="mcsequentialgo">mcsequential.go</h3>
+
+<ul>
+  <li>定义ByKey用来排序“中间键值对”</li>
+  <li>定义loadPlugin()函数来读取os.Args[1]中的map函数和reduce函数</li>
+  <li>程序执行流程
+    <ul>
+      <li>打开文件，将文件名和文件内容（都是字符串），传入map函数中，产生kva键值对，将每个文件产生的kva都添加到中间键值对中。（类似于”apple” : “1”, “banana” : 1, “apple” : “1”)</li>
+      <li>将中间键值对按照ByKey排序，并指定一个output文件。os.Create(oname)</li>
+      <li>将排序后的中间键值对去重，得到每一个key和对应的values，类似于(“apple” : “1”, “1”)，并传入reduce函数中，reduce函数统计每个key出现的次数，输出output（“2”）。</li>
+      <li>最后程序将（key, output）写入文件。</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="mrmaster">mrmaster</h3>
+
+<ul>
+  <li>传入master所需要的文件（多个）以及reduce个数</li>
+</ul>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">m</span> <span class="o">:=</span> <span class="n">mr</span><span class="o">.</span><span class="n">MakeMaster</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">Args</span><span class="p">[</span><span class="m">1</span><span class="o">:</span><span class="p">],</span> <span class="m">10</span><span class="p">)</span>
+</code></pre></div></div>
+
+<ul>
+  <li>利用master的Done函数，每隔一秒检查worker是否全部完成</li>
+</ul>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">for</span> <span class="n">m</span><span class="o">.</span><span class="n">Done</span><span class="p">()</span> <span class="o">==</span> <span class="no">false</span> <span class="p">{</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">Sleep</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">Second</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="mrworker">mrworker</h3>
+
+<ul>
+  <li>传入map函数和reduce函数，创建worker</li>
+</ul>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">mapf</span><span class="p">,</span> <span class="n">reducef</span> <span class="o">:=</span> <span class="n">loadPlugin</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">Args</span><span class="p">[</span><span class="m">1</span><span class="p">])</span>
+<span class="n">mr</span><span class="o">.</span><span class="n">Worker</span><span class="p">(</span><span class="n">mapf</span><span class="p">,</span> <span class="n">reducef</span><span class="p">)</span>
+</code></pre></div></div>
+
+<h3 id="master">master</h3>
+
+<ul>
+  <li>定义Master结构体（my code）</li>
+  <li>定义RPC handler来处理worker的请求</li>
+  <li><del>定义一个</del>server，启动net.listen，注册rpc服务，来处理所有rpc请求(只需要调用)</li>
+  <li>定义一个makeMaster，用来创建master进程（my code)</li>
+  <li>定义Done函数，表明job完成了</li>
+</ul>
+
+<h3 id="rpc">rpc</h3>
+
+<ul>
+  <li>定义rpc变量，注意要全部大写开头(my code)</li>
+</ul>
+
+<h3 id="worker">worker</h3>
+
+<ul>
+  <li>KeyValue结构体，存放key 和 value 都是 string</li>
+  <li>ihash:根据key，产生一个int，用来指派<del>reduce</del>（用来确定）</li>
+  <li>定义Worker函数，传入mapf和reducef两个函数，(mycode)</li>
+  <li>定义call函数，可以向master通过rpc发送信息</li>
+</ul>
+
+<h3 id="a-few-rules">a few rules</h3>
+
+<ul>
+  <li>注意输出文件格式</li>
+</ul>
+
+<h3 id="步骤">步骤</h3>
+
+<ul>
+  <li>定义worker的call函数，向master请求一个任务。</li>
+  <li>定义master的响应函数，将未处理的文件交给worker处理。</li>
+  <li>定义中间键名称 mr-X-Y,其中X为Map task number, Y为reduce task number</li>
+  <li>可以利用Go的json包，把中间键值对存储为json格式文件</li>
+  <li>使用iHash()函数，帮助选择对应的reduce wiker</li>
+  <li>master是并发的，注意锁定共享变量。</li>
+  <li>每10秒检测一次worker是否完成，如果没有完成，则放弃这个worker。</li>
+</ul>
+
+<h2 id="2配置实验环境">2，配置实验环境</h2>
+
+<p>实验环境：WSL（ubuntu 18.04) + VSCode</p>
+
+<p>安装Go 1.13，并解压到/usr/local路径</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo tar -zxvf go1.13.6.linux-amd64.tar.gz -C /usr/local
+</code></pre></div></div>
+
+<p>添加环境变量，参考<a href="https://www.jianshu.com/p/c43ebab25484">这里</a></p>
+
+<p>安装GIt，报错：</p>
+
+<blockquote>
+  <p>Could not get lock /var/lib/dpkg/lock-frontend - open (11: Resource temporarly unavailable)</p>
+</blockquote>
+
+<p>解决办法：</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo rm /var/lib/dpkg/lock
+sudo rm /var/lib/dpkg/lock-frontend
+</code></pre></div></div>
+
+<p>注意：不要安装VSCode的插件，因为无法下载，还会导致go tool运行出错。</p>
+
+<h2 id="3mapreduce实现">3，MapReduce实现</h2>
+
+<h3 id="数据结构定义函数功能介绍文件功能介绍">数据结构定义/函数功能介绍/文件功能介绍</h3>
+
+<h4 id="task-struct">Task （Struct）</h4>
+
+<p>taskType, filaName, taskId（非常重要，在执行map任务时，取值为(0~n-1)能帮助我们确定需要处理的中间键文件名称，在执行reduce任务时（取值0~m-1)，能帮助我们找到所需的中间值文件），mapCount(执行reduceFunction要用）， reduceCount（执行mapFunction的时候要用）workerID(因为可能出现两个worker执行相同任务的情况，此时任务是否完成，应该以master中任务的workerID确定）。</p>
+
+<h4 id="taskstate-struct">TaskState (Struct)</h4>
+
+<p>包括：任务状态：入队？超时？错误？已完成？（0，1，2，3）</p>
+
+<p>任务执行ID：workerID</p>
+
+<p>任务开始执行时间</p>
+
+<h4 id="workergo">Worker.go</h4>
+
+<p>作用：申请/执行任务</p>
+
+<p>worker结构体：包括mapF和reduceF, ID</p>
+
+<p>申请WorkerID —&gt; 申请任务 —&gt; 判断任务类型 —&gt; 执行对应任务 — &gt; 通知master执行的状态  —&gt; 申请任务</p>
+
+<h4 id="mastergo">Master.go</h4>
+
+<p>作用：调度/分配任务</p>
+
+<p>1, 每个一段时间，检查所有任务的状态：包括判断所有任务已完成？将执行太久的任务/报错的任务重新放入准备任务队列</p>
+
+<p>​	1）如果map任务全部完成，则启动reduce任务</p>
+
+<p>​	2）如果reduce任务全部完成，则将Done参数设置为true</p>
+
+<p>2，Master结构体：存放着所有需要共享的变量，包括：master当前管理的任务类型（map/reduce），所有任务的状态（入队？已完成？在执行？故障？）（用一个数组存储，index是TaskId(0~n-1, 0~m-1)， value是taskState，四种），Done：表示全部任务（map and reduce）已完成，files(输入文件)， nReduece(切片数量)， 互斥锁。</p>
+
+<p>3，执行过程：启动所有map任务（入队） —&gt; 将管道中的任务分配给woker —&gt; 每隔一定时间检查所有任务状态，处理超时/失败任务，重新入队，如果已完成 —&gt; 启动所有的reduce任务 —&gt; 将管道中的任务分配给worker —&gt;一定时间检查任务状态，如何任务全部完成  —&gt; Done = true</p>
+
+<p>4，分配任务：收到任务请求（RPC) —&gt; 在管道中获取任务 —&gt; 处理任务（包括确定此任务workerID，改变任务状态，确定此任务的开始时间） —&gt;  将任务分配给worker</p>
+
+<p>5，标记任务完成：收到任务完成请求 —&gt; 判断当前m.taskPhase和args.taskPhase是否对应，workerId是否对应（因为可能有非常慢的worker） —&gt; 标记任务状态为已完成</p>
+
+<h3 id="代码">代码</h3>
+
+<h4 id="初始化map任务">初始化map任务</h4>
+
+<p>将Master结构初始化，确定files和nReduce，并且开启Map任务</p>
+
+<h4 id="请求任务">请求任务</h4>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">w</span> <span class="o">*</span><span class="n">worker</span><span class="p">)</span> <span class="n">requestTask</span><span class="p">()</span> <span class="n">Task</span> <span class="p">{</span>
+	<span class="n">args</span> <span class="o">:=</span> <span class="n">RequestTaskArgs</span><span class="p">{}</span>
+	<span class="n">args</span><span class="o">.</span><span class="n">WorkerID</span> <span class="o">=</span> <span class="n">w</span><span class="o">.</span><span class="n">workerID</span>
+	<span class="n">reply</span> <span class="o">:=</span> <span class="n">RequestTaskReply</span><span class="p">{}</span>
+	<span class="k">if</span> <span class="n">ok</span> <span class="o">:=</span> <span class="n">call</span><span class="p">(</span><span class="s">"Master.AssignOneTask"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">reply</span><span class="p">);</span> <span class="o">!</span><span class="n">ok</span> <span class="p">{</span>
+		<span class="n">log</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="s">"worker %d cannot request a task"</span><span class="p">,</span> <span class="n">w</span><span class="o">.</span><span class="n">workerID</span><span class="p">)</span>
+		<span class="n">os</span><span class="o">.</span><span class="n">Exit</span><span class="p">(</span><span class="m">1</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="o">*</span><span class="n">reply</span><span class="o">.</span><span class="n">Task</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>worker在请求任务中，需要判断ok的值，不然worker永远无法退出？或者连接超时？反正有Bug，无法通过。</p>
+
+<h4 id="注册worker">注册Worker</h4>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">w</span> <span class="o">*</span><span class="n">worker</span><span class="p">)</span> <span class="n">register</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">args</span> <span class="o">:=</span> <span class="n">RegisterArgs</span><span class="p">{}</span>
+	<span class="n">reply</span> <span class="o">:=</span> <span class="n">RegisterReply</span><span class="p">{}</span>
+	<span class="n">call</span><span class="p">(</span><span class="s">"Master.RegisterWorker"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">args</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">reply</span><span class="p">)</span>
+	<span class="n">w</span><span class="o">.</span><span class="n">workerID</span> <span class="o">=</span> <span class="n">reply</span><span class="o">.</span><span class="n">WorkerID</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h4 id="报告任务完成">报告任务完成</h4>
+
+<p>args: 任务类型， 任务ID， 是否完成， workerID</p>
+
+<p>将master的任务标记为已完成，需要满足：任务类型和当前Master处理的任务类型一致，workerID与master中的任务状态的workerID一致，并且报告的是已完成</p>
+
+<h4 id="执行map任务">执行map任务</h4>
+
+<p>mapf(args1, args2) : args1 : fileName, args2 : content， res : key-value数组</p>
+
+<p>将key/value数组分成nReduce份，分别存储在mr-X-Y名称的文件中</p>
+
+<h4 id="执行reduce任务">执行reduce任务</h4>
+
+<p>reduce()</p>
+
+<p>读取所有的中间键值对文件，全部存入一个地方（kva） —&gt;  将相同的key聚合在一起（map)（key, values) —&gt; 对每个key进行reduce操作</p>
+
+<p>将reduece结果整理到res中，并统一写入到mr-out-*文件中，一行行的写入是有问题的，不知道为啥</p>
+
+<p>正确代码：</p>
+
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">func</span> <span class="p">(</span><span class="n">w</span> <span class="o">*</span><span class="n">worker</span><span class="p">)</span> <span class="n">execReduceTask</span><span class="p">(</span><span class="n">task</span> <span class="n">Task</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">maps</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="k">map</span><span class="p">[</span><span class="kt">string</span><span class="p">][]</span><span class="kt">string</span><span class="p">)</span>
+	<span class="k">for</span> <span class="n">idx</span> <span class="o">:=</span> <span class="m">0</span><span class="p">;</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="n">task</span><span class="o">.</span><span class="n">MapCount</span><span class="p">;</span> <span class="n">idx</span><span class="o">++</span> <span class="p">{</span>
+		<span class="n">fileName</span> <span class="o">:=</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s">"mr-%d-%d"</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">task</span><span class="o">.</span><span class="n">ID</span><span class="p">)</span>
+		<span class="n">file</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">Open</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="n">w</span><span class="o">.</span><span class="n">reportTask</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="no">false</span><span class="p">)</span>
+			<span class="k">return</span>
+		<span class="p">}</span>
+		<span class="n">dec</span> <span class="o">:=</span> <span class="n">json</span><span class="o">.</span><span class="n">NewDecoder</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+		<span class="k">for</span> <span class="p">{</span>
+			<span class="k">var</span> <span class="n">kv</span> <span class="n">KeyValue</span>
+			<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">dec</span><span class="o">.</span><span class="n">Decode</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kv</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+			<span class="k">if</span> <span class="n">_</span><span class="p">,</span> <span class="n">ok</span> <span class="o">:=</span> <span class="n">maps</span><span class="p">[</span><span class="n">kv</span><span class="o">.</span><span class="n">Key</span><span class="p">];</span> <span class="o">!</span><span class="n">ok</span> <span class="p">{</span>
+				<span class="n">maps</span><span class="p">[</span><span class="n">kv</span><span class="o">.</span><span class="n">Key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">make</span><span class="p">([]</span><span class="kt">string</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="m">100</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="n">maps</span><span class="p">[</span><span class="n">kv</span><span class="o">.</span><span class="n">Key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">maps</span><span class="p">[</span><span class="n">kv</span><span class="o">.</span><span class="n">Key</span><span class="p">],</span> <span class="n">kv</span><span class="o">.</span><span class="n">Value</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c">//指定slice的长度和容量</span>
+	<span class="n">res</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">([]</span><span class="kt">string</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="m">100</span><span class="p">)</span>
+	<span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="o">:=</span> <span class="k">range</span> <span class="n">maps</span> <span class="p">{</span>
+		<span class="n">res</span> <span class="o">=</span> <span class="nb">append</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s">"%v %v</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">w</span><span class="o">.</span><span class="n">reducef</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)))</span>
+	<span class="p">}</span>
+
+	<span class="k">if</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">ioutil</span><span class="o">.</span><span class="n">WriteFile</span><span class="p">(</span><span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s">"mr-out-%d"</span><span class="p">,</span> <span class="n">task</span><span class="o">.</span><span class="n">ID</span><span class="p">),</span> <span class="p">[]</span><span class="kt">byte</span><span class="p">(</span><span class="n">strings</span><span class="o">.</span><span class="n">Join</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="s">""</span><span class="p">)),</span> <span class="m">0666</span><span class="p">);</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="n">w</span><span class="o">.</span><span class="n">reportTask</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="no">false</span><span class="p">)</span>
+	<span class="p">}</span>
+
+	<span class="n">w</span><span class="o">.</span><span class="n">reportTask</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="no">true</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>有BUG的代码</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">kvs</span> <span class="o">:=</span> <span class="n">make</span><span class="o">(</span><span class="n">map</span><span class="o">[</span><span class="n">string</span><span class="o">][]</span><span class="n">string</span><span class="o">)</span>
+<span class="k">for</span> <span class="n">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">task</span><span class="o">.</span><span class="na">MapCount</span><span class="o">;</span> <span class="n">i</span><span class="o">++</span> <span class="o">{</span>
+	<span class="n">fileName</span> <span class="o">:=</span> <span class="n">fmt</span><span class="o">.</span><span class="na">Sprintf</span><span class="o">(</span><span class="s">"mr-%d-%d"</span><span class="o">,</span> <span class="n">i</span><span class="o">,</span> <span class="n">task</span><span class="o">.</span><span class="na">ID</span><span class="o">)</span>
+	<span class="n">file</span><span class="o">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="na">Open</span><span class="o">(</span><span class="n">fileName</span><span class="o">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="o">{</span>
+		<span class="n">log</span><span class="o">.</span><span class="na">Fatalf</span><span class="o">(</span><span class="s">"cannot open reduceFile %v"</span><span class="o">,</span> <span class="n">fileName</span><span class="o">)</span>
+		<span class="n">w</span><span class="o">.</span><span class="na">reportTask</span><span class="o">(</span><span class="n">task</span><span class="o">,</span> <span class="kc">false</span><span class="o">)</span>
+		<span class="k">return</span>
+	<span class="o">}</span>
+	<span class="n">dec</span> <span class="o">:=</span> <span class="n">json</span><span class="o">.</span><span class="na">NewDecoder</span><span class="o">(</span><span class="n">file</span><span class="o">)</span>
+	<span class="k">for</span> <span class="o">{</span>
+		<span class="kt">var</span> <span class="n">kv</span> <span class="nc">KeyValue</span>
+		<span class="n">err</span> <span class="o">:=</span> <span class="n">dec</span><span class="o">.</span><span class="na">Decode</span><span class="o">(&amp;</span><span class="n">kv</span><span class="o">)</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="o">{</span>
+			<span class="k">break</span>
+		<span class="o">}</span>
+		<span class="c1">//判断key是否存在于kvs</span>
+		<span class="k">if</span> <span class="n">_</span><span class="o">,</span> <span class="n">ok</span> <span class="o">:=</span> <span class="n">kvs</span><span class="o">[</span><span class="n">kv</span><span class="o">.</span><span class="na">Key</span><span class="o">];</span> <span class="o">!</span><span class="n">ok</span> <span class="o">{</span>
+			<span class="n">kvs</span><span class="o">[</span><span class="n">kv</span><span class="o">.</span><span class="na">Key</span><span class="o">]</span> <span class="o">=</span> <span class="n">make</span><span class="o">([]</span><span class="n">string</span><span class="o">,</span> <span class="mi">0</span><span class="o">)</span>
+		<span class="o">}</span>
+		<span class="n">kvs</span><span class="o">[</span><span class="n">kv</span><span class="o">.</span><span class="na">Key</span><span class="o">]</span> <span class="o">=</span> <span class="n">append</span><span class="o">(</span><span class="n">kvs</span><span class="o">[</span><span class="n">kv</span><span class="o">.</span><span class="na">Key</span><span class="o">],</span> <span class="n">kv</span><span class="o">.</span><span class="na">Value</span><span class="o">)</span>
+	<span class="o">}</span>
+<span class="o">}</span>
+<span class="c1">//将reduce结果存入文件</span>
+<span class="n">fileName</span> <span class="o">:=</span> <span class="n">fmt</span><span class="o">.</span><span class="na">Sprintf</span><span class="o">(</span><span class="s">"mr-out-%d"</span><span class="o">,</span> <span class="n">task</span><span class="o">.</span><span class="na">ID</span><span class="o">)</span>
+<span class="n">file</span><span class="o">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="na">Create</span><span class="o">(</span><span class="n">fileName</span><span class="o">)</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="o">{</span>
+	<span class="n">log</span><span class="o">.</span><span class="na">Fatalf</span><span class="o">(</span><span class="s">"cannot create %v"</span><span class="o">,</span> <span class="n">fileName</span><span class="o">)</span>
+	<span class="n">w</span><span class="o">.</span><span class="na">reportTask</span><span class="o">(</span><span class="n">task</span><span class="o">,</span> <span class="kc">false</span><span class="o">)</span>
+<span class="o">}</span>
+<span class="k">for</span> <span class="n">key</span><span class="o">,</span> <span class="n">values</span> <span class="o">:=</span> <span class="n">range</span> <span class="n">kvs</span> <span class="o">{</span>
+	<span class="n">_</span><span class="o">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">file</span><span class="o">.</span><span class="na">WriteString</span><span class="o">(</span><span class="n">fmt</span><span class="o">.</span><span class="na">Sprintf</span><span class="o">(</span><span class="s">"%v %v/n"</span><span class="o">,</span> <span class="n">key</span><span class="o">,</span> <span class="n">w</span><span class="o">.</span><span class="na">reducef</span><span class="o">(</span><span class="n">key</span><span class="o">,</span> <span class="n">values</span><span class="o">)))</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="o">{</span>
+		<span class="n">log</span><span class="o">.</span><span class="na">Fatalf</span><span class="o">(</span><span class="s">"cannot write string in %v"</span><span class="o">,</span> <span class="n">fileName</span><span class="o">)</span>
+		<span class="n">w</span><span class="o">.</span><span class="na">reportTask</span><span class="o">(</span><span class="n">task</span><span class="o">,</span> <span class="kc">false</span><span class="o">)</span>
+	<span class="o">}</span>
+<span class="o">}</span>
+<span class="n">w</span><span class="o">.</span><span class="na">reportTask</span><span class="o">(</span><span class="n">task</span><span class="o">,</span> <span class="kc">true</span><span class="o">)</span>
+</code></pre></div></div>
+
+<h3 id="测试结果">测试结果</h3>
+
+<blockquote>
+  <p>sh test-mr.sh</p>
+</blockquote>
+
+<p>通过所有测试，但是会有：Unexpected EOF提示。</p>
+
+<p><a href="https://imgchr.com/i/yhhswd"><img src="https://s3.ax1x.com/2021/02/19/yhhswd.png" alt="yhhswd.png" /></a></p>
+
+</article>
+      </div>
+    </main>
+
+    
+  </body>
+</html>
