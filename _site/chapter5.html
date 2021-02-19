@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>社区论坛：Kafka处理系统通知</title>
+
+  <!-- Begin Jekyll SEO tag v2.6.1 -->
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="社区论坛：Kafka处理系统通知" />
+<meta name="author" content="tie" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Chapter 5 消息队列服务器 服务器发送消息给某一用户，而且操作频繁 阻塞队列 JAVA自带API，解决线程通信问题，依靠put,take 生产者与消费者模式，Blocking Queue构建了一个桥梁，能够解决生产速度/消费速度不匹配问题。阻塞的时候只是在那里等着，但是不会占用CPU资源，对性能不会有影响。 Blocking Queue底层有多种实现方式，举例ArrayBlockingQueue。 分别定义一个生产者和三个消费者，其中生产者生产速度快，消费者消费速度慢，生产者和消费者共用一个阻塞队列 public class BlockingQueueTests { public static void main(String[] args) { BlockingQueue&lt;Integer&gt; blockingQueue = new ArrayBlockingQueue&lt;&gt;(10); new Thread(new Producer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); } } class Producer implements Runnable { private BlockingQueue&lt;Integer&gt; blockingQueue; public Producer(BlockingQueue&lt;Integer&gt; blockingQueue) { this.blockingQueue = blockingQueue; } @Override public void run() { for (int i = 0; i &lt; 100; i++) { try { Thread.sleep(20); blockingQueue.put(i); System.out.println(Thread.currentThread().getName() + &quot;当前生产：&quot; + i + &quot;共&quot; + blockingQueue.size() + &quot;个。&quot;); } catch (Exception e) { e.getStackTrace(); } } } } class Consumer implements Runnable { private BlockingQueue&lt;Integer&gt; blockingQueue; public Consumer(BlockingQueue&lt;Integer&gt; blockingQueue) { this.blockingQueue = blockingQueue; } @Override public void run() { while (true) { try { Thread.sleep(new Random().nextInt(1000)); int i = blockingQueue.take(); System.out.println(Thread.currentThread().getName() + &quot;当前消费：&quot; + i + &quot;共&quot; + blockingQueue.size() + &quot;个。&quot;); } catch (Exception e) { e.getStackTrace(); } } } } Kafka入门 分布式的流处理平台，包括消息系统，日志收集，用户行为追踪，流式处理。 特点：高吞吐量，消息持久化（存在硬盘上）（长久保存）（对硬盘的顺序读写）（速度快），高可靠性（分布式），高扩展性（简单配置可增加服务器） 消息队列实现方式：点对点（每个消息只会消费一次），发布订阅模式 术语： Broker：服务器 Zookeeper：独立软件，管理集群，Kafka可内置Zookeeper Topic：空间，相当于文件夹，存放消息 Partition：将Topic分区，可以多线程同时写数据， Offset，消息在partition中存放位置 Leader Replica：主副本，每个分区都有多个副本，可以提供消息 Follower Replica：从副本，只是备份，不负责相应，主副本挂掉，选择一个从副本变为主副本。 安装过程略 启动zookeeper bin\windows\zookeeper-server-start.bat config\zookeeper.properties 启动kafka bin\windows\kafka-server-start.bat config\server.properties 创建主题（表示一种消息类别） Spring整合Kafka 生产者发消息：主动 消费者收到消息：被动 演示： @SpringBootTest @ContextConfiguration(classes = CommunityApplication.class) public class KafkaTests { @Autowired private KafkaProducer kafkaProducer; @Autowired private KafkaConsumer kafkaConsumer; @Test public void testKafka() { kafkaProducer.sendMessage(&quot;test&quot;, &quot;你好&quot;); kafkaProducer.sendMessage(&quot;test&quot;, &quot;hello&quot;); try { Thread.sleep(1000 * 10); } catch (InterruptedException e) { e.printStackTrace(); } } } @Component class KafkaProducer { @Autowired private KafkaTemplate kafkaTemplate; public void sendMessage(String topic, String context) { kafkaTemplate.send(topic, context); } } @Component class KafkaConsumer { @KafkaListener(topics = {&quot;test&quot;}) public void handleMessage(ConsumerRecord consumerRecord) { System.out.println(consumerRecord.value()); } } 发布系统通知 点赞/评论/关注后，需要发布通知，系统发布通知是很频繁的功能。 三类不同的topic，封装，事件发生后，生产者产生消息，消费者从队列中读到消息，从message表中写一条数据。 封装事件对象，对所需的数据进行封装（消费者可以用多种方式处理） 开发生产者（产生事件） 开发消费者（消费事件，放在message库中） 补充：回复一共有三种：给帖子的回复，EntityType=1，给评论的回复：EntityType=2，给回复的回复：EntityType = 2，并且有targetId 封装事件 public class Event { private String topic; private int userId; private int entityType; private int entityId; private int entityUserId; private Map&lt;String, Object&gt; data = new HashMap&lt;&gt;(); public String getTopic() { return topic; } public Event setTopic(String topic) { this.topic = topic; return this; } public int getUserId() { return userId; } public Event setUserId(int userId) { this.userId = userId; return this; } public int getEntityType() { return entityType; } public Event setEntityType(int entityType) { this.entityType = entityType; return this; } public int getEntityId() { return entityId; } public Event setEntityId(int entityId) { this.entityId = entityId; return this; } public int getEntityUserId() { return entityUserId; } public Event setEntityUserId(int entityUserId) { this.entityUserId = entityUserId; return this; } public Map&lt;String, Object&gt; getData() { return data; } public Event setData(String key, Object value) { this.data.put(key, value); return this; } } 定义生产者和消费者 生产者 @Component public class EventProducer { @Autowired private KafkaTemplate kafkaTemplate; //处理事件 public void fireEvent(Event event) { //将之间发送指定主题 kafkaTemplate.send(event.getTopic(), JSONObject.toJSONString(event)); } } 消费者： @KafkaListener(topics = {TOPIC_COMMENT, TOPIC_LIKE, TOPIC_FOLLOW}) public void handleCommentMessage(ConsumerRecord record) { if (record == null || record.value() == null) { logger.error(&quot;消息内容为空&quot;); return; } Event event = JSONObject.parseObject(record.value().toString(), Event.class); if (event == null) { logger.error(&quot;消息格式错误&quot;); return; } //构造meaage对象 Message message = new Message(); message.setFromId(SYSTEM_USER_ID); message.setToId(event.getEntityUserId()); message.setConversationId(event.getTopic()); message.setCreateTime(new Date()); Map&lt;String, Object&gt; content = new HashMap&lt;&gt;(); content.put(&quot;userId&quot;, event.getUserId()); content.put(&quot;entityType&quot;, event.getEntityType()); content.put(&quot;entityId&quot;, event.getEntityId()); if (!event.getData().isEmpty()) { for (Map.Entry&lt;String, Object&gt; entry : event.getData().entrySet()) { content.put(entry.getKey(), entry.getValue()); } } message.setContent(JSONObject.toJSONString(content)); messageService.addMessage(message); } 在关注/点赞/评论的controller中，生产对应事件 Event event = new Event() .setTopic(TOPIC_COMMENT) .setEntityType(comment.getEntityType()) .setEntityId(comment.getEntityType()) .setUserId(hostHolder.getUser().getId()) .setData(&quot;postId&quot;, discussPostId); if (comment.getEntityType() == ENTITY_TYPE_POST) { DiscussPost post = discussPostService.findDiscussPostById(comment.getEntityId()); event.setEntityUserId(post.getUserId()); } else { Comment target = commentService.findCommentById(comment.getEntityId()); event.setEntityUserId(target.getUserId()); } if (likeStatus == 1) { Event event = new Event() .setTopic(TOPIC_LIKE) .setUserId(hostHolder.getUser().getId()) .setEntityType(entityType) .setEntityId(entityId) .setEntityUserId(entityUserId) .setData(&quot;postId&quot;, postId); eventProducer.fireEvent(event); } Event event = new Event() .setTopic(TOPIC_FOLLOW) .setEntityType(entityType) .setEntityId(entityId) .setEntityUserId(entityId); eventProducer.fireEvent(event); 显示系统通知 开发通知列表：三类通知，评论/点赞/关注 开发通知详情，能显示某类通知的详情页面 未读消息：头部的未读消息 = 未读私信 + 未读通知 实现通知列表 数据访问层 //某个主题下的最新通知（最新通知） Message selectLatestNotice(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); //某个主题包含的通知数量（显示数量） int selectNoticeCount(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); //查询未读通知数量 //如果不穿topic，则查所有 int selectNoticeUnreadCount(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); 服务层 //查询通知 public Message findLatestNotice(int userId, String topic) { return messageMapper.selectLatestNotice(userId, topic); } //查询消息数量 public int findNoticeCount(int userId, String topic) { return messageMapper.selectNoticeCount(userId, topic); } //查询未读消息数量 public int findNoticeUnreadCount(int userId, String topic) { return messageMapper.selectNoticeUnreadCount(userId, topic); } 控制层 @RequestMapping(path = &quot;/notice/list&quot;, method = RequestMethod.GET) public String getNoticeList(Model model) { User user = hostHolder.getUser(); //查询评论类通知 Message message = messageService.findLatestNotice(user.getId(), TOPIC_COMMENT); Map&lt;String, Object&gt; messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); messageVO.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_COMMENT); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_COMMENT); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;commentNotice&quot;, messageVO); //查询点赞类通知 message = messageService.findLatestNotice(user.getId(), TOPIC_LIKE); messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); messageVO.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_LIKE); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_LIKE); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;likeNotice&quot;, messageVO); //查询关注类通知 message = messageService.findLatestNotice(user.getId(), TOPIC_FOLLOW); messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_FOLLOW); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_FOLLOW); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;followNotice&quot;, messageVO); //查询未读消息数量 int letterUnreadCount = messageService.findUnreadCount(user.getId(), null); model.addAttribute(&quot;letterUnreadCount&quot;, letterUnreadCount); int noticeUnreadCount = messageService.findNoticeUnreadCount(user.getId(), null); model.addAttribute(&quot;noticeUnreadCount&quot;, noticeUnreadCount); return &quot;/site/notice&quot;; } 实现通知详情 数据层 //查询某个主题的所有通知 List&lt;Message&gt; selectNotices(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic, @Param(&quot;offset&quot;) int offset, @Param(&quot;limit&quot;) int limit); 服务层 //查询通知 public List&lt;Message&gt; findNotices(int userId, String topic, int offset, int limit) { return messageMapper.selectNotices(userId, topic, offset, limit); } 控制层 @RequestMapping(path = &quot;/notice/detail/{topic}&quot;, method = RequestMethod.GET) public String getNoticeDetail(@PathVariable(&quot;topic&quot;) String topic, Model model, Page page) { User user = hostHolder.getUser(); page.setPath(&quot;/notice/detail/&quot; + topic); page.setLimit(5); page.setRows(messageService.findNoticeCount(user.getId(), topic)); List&lt;Message&gt; noticeList = messageService.findNotices(user.getId(), topic, page.getOffset(), page.getLimit()); List&lt;Map&lt;String, Object&gt;&gt; noticeVoList = new ArrayList&lt;&gt;(); if (noticeList != null) { for (Message notice : noticeList) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); map.put(&quot;notice&quot;, notice); String content = HtmlUtils.htmlUnescape(notice.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); map.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); map.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); map.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); map.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); map.put(&quot;fromUser&quot;, userService.findUserById(notice.getFromId())); noticeVoList.add(map); } } model.addAttribute(&quot;notices&quot;, noticeVoList); //设置为已读 List&lt;Integer&gt; ids = getLetterIds(noticeList); if (!ids.isEmpty()) { messageService.readMessage(ids); } return &quot;site/notice-detail&quot;; } 头部总未读消息数量 使用拦截器 @Component public class MessageInterceptor implements HandlerInterceptor { @Autowired private HostHolder hostHolder; @Autowired private MessageService messageService; @Override public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) { User user = hostHolder.getUser(); if (user != null &amp;&amp; modelAndView != null) { int letterUnreadCount = messageService.findUnreadCount(user.getId(), null); int noticeUnreadCount = messageService.findNoticeUnreadCount(user.getId(), null); modelAndView.addObject(&quot;allUnreadCount&quot;, letterUnreadCount + noticeUnreadCount); } } } 在配置类中配置即可。" />
+<meta property="og:description" content="Chapter 5 消息队列服务器 服务器发送消息给某一用户，而且操作频繁 阻塞队列 JAVA自带API，解决线程通信问题，依靠put,take 生产者与消费者模式，Blocking Queue构建了一个桥梁，能够解决生产速度/消费速度不匹配问题。阻塞的时候只是在那里等着，但是不会占用CPU资源，对性能不会有影响。 Blocking Queue底层有多种实现方式，举例ArrayBlockingQueue。 分别定义一个生产者和三个消费者，其中生产者生产速度快，消费者消费速度慢，生产者和消费者共用一个阻塞队列 public class BlockingQueueTests { public static void main(String[] args) { BlockingQueue&lt;Integer&gt; blockingQueue = new ArrayBlockingQueue&lt;&gt;(10); new Thread(new Producer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); } } class Producer implements Runnable { private BlockingQueue&lt;Integer&gt; blockingQueue; public Producer(BlockingQueue&lt;Integer&gt; blockingQueue) { this.blockingQueue = blockingQueue; } @Override public void run() { for (int i = 0; i &lt; 100; i++) { try { Thread.sleep(20); blockingQueue.put(i); System.out.println(Thread.currentThread().getName() + &quot;当前生产：&quot; + i + &quot;共&quot; + blockingQueue.size() + &quot;个。&quot;); } catch (Exception e) { e.getStackTrace(); } } } } class Consumer implements Runnable { private BlockingQueue&lt;Integer&gt; blockingQueue; public Consumer(BlockingQueue&lt;Integer&gt; blockingQueue) { this.blockingQueue = blockingQueue; } @Override public void run() { while (true) { try { Thread.sleep(new Random().nextInt(1000)); int i = blockingQueue.take(); System.out.println(Thread.currentThread().getName() + &quot;当前消费：&quot; + i + &quot;共&quot; + blockingQueue.size() + &quot;个。&quot;); } catch (Exception e) { e.getStackTrace(); } } } } Kafka入门 分布式的流处理平台，包括消息系统，日志收集，用户行为追踪，流式处理。 特点：高吞吐量，消息持久化（存在硬盘上）（长久保存）（对硬盘的顺序读写）（速度快），高可靠性（分布式），高扩展性（简单配置可增加服务器） 消息队列实现方式：点对点（每个消息只会消费一次），发布订阅模式 术语： Broker：服务器 Zookeeper：独立软件，管理集群，Kafka可内置Zookeeper Topic：空间，相当于文件夹，存放消息 Partition：将Topic分区，可以多线程同时写数据， Offset，消息在partition中存放位置 Leader Replica：主副本，每个分区都有多个副本，可以提供消息 Follower Replica：从副本，只是备份，不负责相应，主副本挂掉，选择一个从副本变为主副本。 安装过程略 启动zookeeper bin\windows\zookeeper-server-start.bat config\zookeeper.properties 启动kafka bin\windows\kafka-server-start.bat config\server.properties 创建主题（表示一种消息类别） Spring整合Kafka 生产者发消息：主动 消费者收到消息：被动 演示： @SpringBootTest @ContextConfiguration(classes = CommunityApplication.class) public class KafkaTests { @Autowired private KafkaProducer kafkaProducer; @Autowired private KafkaConsumer kafkaConsumer; @Test public void testKafka() { kafkaProducer.sendMessage(&quot;test&quot;, &quot;你好&quot;); kafkaProducer.sendMessage(&quot;test&quot;, &quot;hello&quot;); try { Thread.sleep(1000 * 10); } catch (InterruptedException e) { e.printStackTrace(); } } } @Component class KafkaProducer { @Autowired private KafkaTemplate kafkaTemplate; public void sendMessage(String topic, String context) { kafkaTemplate.send(topic, context); } } @Component class KafkaConsumer { @KafkaListener(topics = {&quot;test&quot;}) public void handleMessage(ConsumerRecord consumerRecord) { System.out.println(consumerRecord.value()); } } 发布系统通知 点赞/评论/关注后，需要发布通知，系统发布通知是很频繁的功能。 三类不同的topic，封装，事件发生后，生产者产生消息，消费者从队列中读到消息，从message表中写一条数据。 封装事件对象，对所需的数据进行封装（消费者可以用多种方式处理） 开发生产者（产生事件） 开发消费者（消费事件，放在message库中） 补充：回复一共有三种：给帖子的回复，EntityType=1，给评论的回复：EntityType=2，给回复的回复：EntityType = 2，并且有targetId 封装事件 public class Event { private String topic; private int userId; private int entityType; private int entityId; private int entityUserId; private Map&lt;String, Object&gt; data = new HashMap&lt;&gt;(); public String getTopic() { return topic; } public Event setTopic(String topic) { this.topic = topic; return this; } public int getUserId() { return userId; } public Event setUserId(int userId) { this.userId = userId; return this; } public int getEntityType() { return entityType; } public Event setEntityType(int entityType) { this.entityType = entityType; return this; } public int getEntityId() { return entityId; } public Event setEntityId(int entityId) { this.entityId = entityId; return this; } public int getEntityUserId() { return entityUserId; } public Event setEntityUserId(int entityUserId) { this.entityUserId = entityUserId; return this; } public Map&lt;String, Object&gt; getData() { return data; } public Event setData(String key, Object value) { this.data.put(key, value); return this; } } 定义生产者和消费者 生产者 @Component public class EventProducer { @Autowired private KafkaTemplate kafkaTemplate; //处理事件 public void fireEvent(Event event) { //将之间发送指定主题 kafkaTemplate.send(event.getTopic(), JSONObject.toJSONString(event)); } } 消费者： @KafkaListener(topics = {TOPIC_COMMENT, TOPIC_LIKE, TOPIC_FOLLOW}) public void handleCommentMessage(ConsumerRecord record) { if (record == null || record.value() == null) { logger.error(&quot;消息内容为空&quot;); return; } Event event = JSONObject.parseObject(record.value().toString(), Event.class); if (event == null) { logger.error(&quot;消息格式错误&quot;); return; } //构造meaage对象 Message message = new Message(); message.setFromId(SYSTEM_USER_ID); message.setToId(event.getEntityUserId()); message.setConversationId(event.getTopic()); message.setCreateTime(new Date()); Map&lt;String, Object&gt; content = new HashMap&lt;&gt;(); content.put(&quot;userId&quot;, event.getUserId()); content.put(&quot;entityType&quot;, event.getEntityType()); content.put(&quot;entityId&quot;, event.getEntityId()); if (!event.getData().isEmpty()) { for (Map.Entry&lt;String, Object&gt; entry : event.getData().entrySet()) { content.put(entry.getKey(), entry.getValue()); } } message.setContent(JSONObject.toJSONString(content)); messageService.addMessage(message); } 在关注/点赞/评论的controller中，生产对应事件 Event event = new Event() .setTopic(TOPIC_COMMENT) .setEntityType(comment.getEntityType()) .setEntityId(comment.getEntityType()) .setUserId(hostHolder.getUser().getId()) .setData(&quot;postId&quot;, discussPostId); if (comment.getEntityType() == ENTITY_TYPE_POST) { DiscussPost post = discussPostService.findDiscussPostById(comment.getEntityId()); event.setEntityUserId(post.getUserId()); } else { Comment target = commentService.findCommentById(comment.getEntityId()); event.setEntityUserId(target.getUserId()); } if (likeStatus == 1) { Event event = new Event() .setTopic(TOPIC_LIKE) .setUserId(hostHolder.getUser().getId()) .setEntityType(entityType) .setEntityId(entityId) .setEntityUserId(entityUserId) .setData(&quot;postId&quot;, postId); eventProducer.fireEvent(event); } Event event = new Event() .setTopic(TOPIC_FOLLOW) .setEntityType(entityType) .setEntityId(entityId) .setEntityUserId(entityId); eventProducer.fireEvent(event); 显示系统通知 开发通知列表：三类通知，评论/点赞/关注 开发通知详情，能显示某类通知的详情页面 未读消息：头部的未读消息 = 未读私信 + 未读通知 实现通知列表 数据访问层 //某个主题下的最新通知（最新通知） Message selectLatestNotice(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); //某个主题包含的通知数量（显示数量） int selectNoticeCount(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); //查询未读通知数量 //如果不穿topic，则查所有 int selectNoticeUnreadCount(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); 服务层 //查询通知 public Message findLatestNotice(int userId, String topic) { return messageMapper.selectLatestNotice(userId, topic); } //查询消息数量 public int findNoticeCount(int userId, String topic) { return messageMapper.selectNoticeCount(userId, topic); } //查询未读消息数量 public int findNoticeUnreadCount(int userId, String topic) { return messageMapper.selectNoticeUnreadCount(userId, topic); } 控制层 @RequestMapping(path = &quot;/notice/list&quot;, method = RequestMethod.GET) public String getNoticeList(Model model) { User user = hostHolder.getUser(); //查询评论类通知 Message message = messageService.findLatestNotice(user.getId(), TOPIC_COMMENT); Map&lt;String, Object&gt; messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); messageVO.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_COMMENT); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_COMMENT); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;commentNotice&quot;, messageVO); //查询点赞类通知 message = messageService.findLatestNotice(user.getId(), TOPIC_LIKE); messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); messageVO.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_LIKE); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_LIKE); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;likeNotice&quot;, messageVO); //查询关注类通知 message = messageService.findLatestNotice(user.getId(), TOPIC_FOLLOW); messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_FOLLOW); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_FOLLOW); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;followNotice&quot;, messageVO); //查询未读消息数量 int letterUnreadCount = messageService.findUnreadCount(user.getId(), null); model.addAttribute(&quot;letterUnreadCount&quot;, letterUnreadCount); int noticeUnreadCount = messageService.findNoticeUnreadCount(user.getId(), null); model.addAttribute(&quot;noticeUnreadCount&quot;, noticeUnreadCount); return &quot;/site/notice&quot;; } 实现通知详情 数据层 //查询某个主题的所有通知 List&lt;Message&gt; selectNotices(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic, @Param(&quot;offset&quot;) int offset, @Param(&quot;limit&quot;) int limit); 服务层 //查询通知 public List&lt;Message&gt; findNotices(int userId, String topic, int offset, int limit) { return messageMapper.selectNotices(userId, topic, offset, limit); } 控制层 @RequestMapping(path = &quot;/notice/detail/{topic}&quot;, method = RequestMethod.GET) public String getNoticeDetail(@PathVariable(&quot;topic&quot;) String topic, Model model, Page page) { User user = hostHolder.getUser(); page.setPath(&quot;/notice/detail/&quot; + topic); page.setLimit(5); page.setRows(messageService.findNoticeCount(user.getId(), topic)); List&lt;Message&gt; noticeList = messageService.findNotices(user.getId(), topic, page.getOffset(), page.getLimit()); List&lt;Map&lt;String, Object&gt;&gt; noticeVoList = new ArrayList&lt;&gt;(); if (noticeList != null) { for (Message notice : noticeList) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); map.put(&quot;notice&quot;, notice); String content = HtmlUtils.htmlUnescape(notice.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); map.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); map.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); map.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); map.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); map.put(&quot;fromUser&quot;, userService.findUserById(notice.getFromId())); noticeVoList.add(map); } } model.addAttribute(&quot;notices&quot;, noticeVoList); //设置为已读 List&lt;Integer&gt; ids = getLetterIds(noticeList); if (!ids.isEmpty()) { messageService.readMessage(ids); } return &quot;site/notice-detail&quot;; } 头部总未读消息数量 使用拦截器 @Component public class MessageInterceptor implements HandlerInterceptor { @Autowired private HostHolder hostHolder; @Autowired private MessageService messageService; @Override public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) { User user = hostHolder.getUser(); if (user != null &amp;&amp; modelAndView != null) { int letterUnreadCount = messageService.findUnreadCount(user.getId(), null); int noticeUnreadCount = messageService.findNoticeUnreadCount(user.getId(), null); modelAndView.addObject(&quot;allUnreadCount&quot;, letterUnreadCount + noticeUnreadCount); } } } 在配置类中配置即可。" />
+<link rel="canonical" href="https://github.com/tietietietie/tietietietie.github.io/chapter5.html" />
+<meta property="og:url" content="https://github.com/tietietietie/tietietietie.github.io/chapter5.html" />
+<meta property="og:site_name" content="tie’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-06-21T06:41:00+08:00" />
+<script type="application/ld+json">
+{"url":"https://github.com/tietietietie/tietietietie.github.io/chapter5.html","headline":"社区论坛：Kafka处理系统通知","dateModified":"2020-06-21T06:41:00+08:00","datePublished":"2020-06-21T06:41:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://github.com/tietietietie/tietietietie.github.io/chapter5.html"},"author":{"@type":"Person","name":"tie"},"description":"Chapter 5 消息队列服务器 服务器发送消息给某一用户，而且操作频繁 阻塞队列 JAVA自带API，解决线程通信问题，依靠put,take 生产者与消费者模式，Blocking Queue构建了一个桥梁，能够解决生产速度/消费速度不匹配问题。阻塞的时候只是在那里等着，但是不会占用CPU资源，对性能不会有影响。 Blocking Queue底层有多种实现方式，举例ArrayBlockingQueue。 分别定义一个生产者和三个消费者，其中生产者生产速度快，消费者消费速度慢，生产者和消费者共用一个阻塞队列 public class BlockingQueueTests { public static void main(String[] args) { BlockingQueue&lt;Integer&gt; blockingQueue = new ArrayBlockingQueue&lt;&gt;(10); new Thread(new Producer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); new Thread(new Consumer(blockingQueue)).start(); } } class Producer implements Runnable { private BlockingQueue&lt;Integer&gt; blockingQueue; public Producer(BlockingQueue&lt;Integer&gt; blockingQueue) { this.blockingQueue = blockingQueue; } @Override public void run() { for (int i = 0; i &lt; 100; i++) { try { Thread.sleep(20); blockingQueue.put(i); System.out.println(Thread.currentThread().getName() + &quot;当前生产：&quot; + i + &quot;共&quot; + blockingQueue.size() + &quot;个。&quot;); } catch (Exception e) { e.getStackTrace(); } } } } class Consumer implements Runnable { private BlockingQueue&lt;Integer&gt; blockingQueue; public Consumer(BlockingQueue&lt;Integer&gt; blockingQueue) { this.blockingQueue = blockingQueue; } @Override public void run() { while (true) { try { Thread.sleep(new Random().nextInt(1000)); int i = blockingQueue.take(); System.out.println(Thread.currentThread().getName() + &quot;当前消费：&quot; + i + &quot;共&quot; + blockingQueue.size() + &quot;个。&quot;); } catch (Exception e) { e.getStackTrace(); } } } } Kafka入门 分布式的流处理平台，包括消息系统，日志收集，用户行为追踪，流式处理。 特点：高吞吐量，消息持久化（存在硬盘上）（长久保存）（对硬盘的顺序读写）（速度快），高可靠性（分布式），高扩展性（简单配置可增加服务器） 消息队列实现方式：点对点（每个消息只会消费一次），发布订阅模式 术语： Broker：服务器 Zookeeper：独立软件，管理集群，Kafka可内置Zookeeper Topic：空间，相当于文件夹，存放消息 Partition：将Topic分区，可以多线程同时写数据， Offset，消息在partition中存放位置 Leader Replica：主副本，每个分区都有多个副本，可以提供消息 Follower Replica：从副本，只是备份，不负责相应，主副本挂掉，选择一个从副本变为主副本。 安装过程略 启动zookeeper bin\\windows\\zookeeper-server-start.bat config\\zookeeper.properties 启动kafka bin\\windows\\kafka-server-start.bat config\\server.properties 创建主题（表示一种消息类别） Spring整合Kafka 生产者发消息：主动 消费者收到消息：被动 演示： @SpringBootTest @ContextConfiguration(classes = CommunityApplication.class) public class KafkaTests { @Autowired private KafkaProducer kafkaProducer; @Autowired private KafkaConsumer kafkaConsumer; @Test public void testKafka() { kafkaProducer.sendMessage(&quot;test&quot;, &quot;你好&quot;); kafkaProducer.sendMessage(&quot;test&quot;, &quot;hello&quot;); try { Thread.sleep(1000 * 10); } catch (InterruptedException e) { e.printStackTrace(); } } } @Component class KafkaProducer { @Autowired private KafkaTemplate kafkaTemplate; public void sendMessage(String topic, String context) { kafkaTemplate.send(topic, context); } } @Component class KafkaConsumer { @KafkaListener(topics = {&quot;test&quot;}) public void handleMessage(ConsumerRecord consumerRecord) { System.out.println(consumerRecord.value()); } } 发布系统通知 点赞/评论/关注后，需要发布通知，系统发布通知是很频繁的功能。 三类不同的topic，封装，事件发生后，生产者产生消息，消费者从队列中读到消息，从message表中写一条数据。 封装事件对象，对所需的数据进行封装（消费者可以用多种方式处理） 开发生产者（产生事件） 开发消费者（消费事件，放在message库中） 补充：回复一共有三种：给帖子的回复，EntityType=1，给评论的回复：EntityType=2，给回复的回复：EntityType = 2，并且有targetId 封装事件 public class Event { private String topic; private int userId; private int entityType; private int entityId; private int entityUserId; private Map&lt;String, Object&gt; data = new HashMap&lt;&gt;(); public String getTopic() { return topic; } public Event setTopic(String topic) { this.topic = topic; return this; } public int getUserId() { return userId; } public Event setUserId(int userId) { this.userId = userId; return this; } public int getEntityType() { return entityType; } public Event setEntityType(int entityType) { this.entityType = entityType; return this; } public int getEntityId() { return entityId; } public Event setEntityId(int entityId) { this.entityId = entityId; return this; } public int getEntityUserId() { return entityUserId; } public Event setEntityUserId(int entityUserId) { this.entityUserId = entityUserId; return this; } public Map&lt;String, Object&gt; getData() { return data; } public Event setData(String key, Object value) { this.data.put(key, value); return this; } } 定义生产者和消费者 生产者 @Component public class EventProducer { @Autowired private KafkaTemplate kafkaTemplate; //处理事件 public void fireEvent(Event event) { //将之间发送指定主题 kafkaTemplate.send(event.getTopic(), JSONObject.toJSONString(event)); } } 消费者： @KafkaListener(topics = {TOPIC_COMMENT, TOPIC_LIKE, TOPIC_FOLLOW}) public void handleCommentMessage(ConsumerRecord record) { if (record == null || record.value() == null) { logger.error(&quot;消息内容为空&quot;); return; } Event event = JSONObject.parseObject(record.value().toString(), Event.class); if (event == null) { logger.error(&quot;消息格式错误&quot;); return; } //构造meaage对象 Message message = new Message(); message.setFromId(SYSTEM_USER_ID); message.setToId(event.getEntityUserId()); message.setConversationId(event.getTopic()); message.setCreateTime(new Date()); Map&lt;String, Object&gt; content = new HashMap&lt;&gt;(); content.put(&quot;userId&quot;, event.getUserId()); content.put(&quot;entityType&quot;, event.getEntityType()); content.put(&quot;entityId&quot;, event.getEntityId()); if (!event.getData().isEmpty()) { for (Map.Entry&lt;String, Object&gt; entry : event.getData().entrySet()) { content.put(entry.getKey(), entry.getValue()); } } message.setContent(JSONObject.toJSONString(content)); messageService.addMessage(message); } 在关注/点赞/评论的controller中，生产对应事件 Event event = new Event() .setTopic(TOPIC_COMMENT) .setEntityType(comment.getEntityType()) .setEntityId(comment.getEntityType()) .setUserId(hostHolder.getUser().getId()) .setData(&quot;postId&quot;, discussPostId); if (comment.getEntityType() == ENTITY_TYPE_POST) { DiscussPost post = discussPostService.findDiscussPostById(comment.getEntityId()); event.setEntityUserId(post.getUserId()); } else { Comment target = commentService.findCommentById(comment.getEntityId()); event.setEntityUserId(target.getUserId()); } if (likeStatus == 1) { Event event = new Event() .setTopic(TOPIC_LIKE) .setUserId(hostHolder.getUser().getId()) .setEntityType(entityType) .setEntityId(entityId) .setEntityUserId(entityUserId) .setData(&quot;postId&quot;, postId); eventProducer.fireEvent(event); } Event event = new Event() .setTopic(TOPIC_FOLLOW) .setEntityType(entityType) .setEntityId(entityId) .setEntityUserId(entityId); eventProducer.fireEvent(event); 显示系统通知 开发通知列表：三类通知，评论/点赞/关注 开发通知详情，能显示某类通知的详情页面 未读消息：头部的未读消息 = 未读私信 + 未读通知 实现通知列表 数据访问层 //某个主题下的最新通知（最新通知） Message selectLatestNotice(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); //某个主题包含的通知数量（显示数量） int selectNoticeCount(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); //查询未读通知数量 //如果不穿topic，则查所有 int selectNoticeUnreadCount(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic); 服务层 //查询通知 public Message findLatestNotice(int userId, String topic) { return messageMapper.selectLatestNotice(userId, topic); } //查询消息数量 public int findNoticeCount(int userId, String topic) { return messageMapper.selectNoticeCount(userId, topic); } //查询未读消息数量 public int findNoticeUnreadCount(int userId, String topic) { return messageMapper.selectNoticeUnreadCount(userId, topic); } 控制层 @RequestMapping(path = &quot;/notice/list&quot;, method = RequestMethod.GET) public String getNoticeList(Model model) { User user = hostHolder.getUser(); //查询评论类通知 Message message = messageService.findLatestNotice(user.getId(), TOPIC_COMMENT); Map&lt;String, Object&gt; messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); messageVO.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_COMMENT); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_COMMENT); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;commentNotice&quot;, messageVO); //查询点赞类通知 message = messageService.findLatestNotice(user.getId(), TOPIC_LIKE); messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); messageVO.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_LIKE); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_LIKE); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;likeNotice&quot;, messageVO); //查询关注类通知 message = messageService.findLatestNotice(user.getId(), TOPIC_FOLLOW); messageVO = new HashMap&lt;&gt;(); messageVO.put(&quot;message&quot;, message); if (message != null) { //还原content String content = HtmlUtils.htmlUnescape(message.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); messageVO.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); messageVO.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); messageVO.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); int count = messageService.findNoticeCount(user.getId(), TOPIC_FOLLOW); messageVO.put(&quot;count&quot;, count); int unreadCount = messageService.findNoticeUnreadCount(user.getId(), TOPIC_FOLLOW); messageVO.put(&quot;unread&quot;, unreadCount); } model.addAttribute(&quot;followNotice&quot;, messageVO); //查询未读消息数量 int letterUnreadCount = messageService.findUnreadCount(user.getId(), null); model.addAttribute(&quot;letterUnreadCount&quot;, letterUnreadCount); int noticeUnreadCount = messageService.findNoticeUnreadCount(user.getId(), null); model.addAttribute(&quot;noticeUnreadCount&quot;, noticeUnreadCount); return &quot;/site/notice&quot;; } 实现通知详情 数据层 //查询某个主题的所有通知 List&lt;Message&gt; selectNotices(@Param(&quot;userId&quot;) int userId, @Param(&quot;topic&quot;) String topic, @Param(&quot;offset&quot;) int offset, @Param(&quot;limit&quot;) int limit); 服务层 //查询通知 public List&lt;Message&gt; findNotices(int userId, String topic, int offset, int limit) { return messageMapper.selectNotices(userId, topic, offset, limit); } 控制层 @RequestMapping(path = &quot;/notice/detail/{topic}&quot;, method = RequestMethod.GET) public String getNoticeDetail(@PathVariable(&quot;topic&quot;) String topic, Model model, Page page) { User user = hostHolder.getUser(); page.setPath(&quot;/notice/detail/&quot; + topic); page.setLimit(5); page.setRows(messageService.findNoticeCount(user.getId(), topic)); List&lt;Message&gt; noticeList = messageService.findNotices(user.getId(), topic, page.getOffset(), page.getLimit()); List&lt;Map&lt;String, Object&gt;&gt; noticeVoList = new ArrayList&lt;&gt;(); if (noticeList != null) { for (Message notice : noticeList) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); map.put(&quot;notice&quot;, notice); String content = HtmlUtils.htmlUnescape(notice.getContent()); Map&lt;String, Object&gt; data = JSONObject.parseObject(content, HashMap.class); map.put(&quot;user&quot;, userService.findUserById((Integer) data.get(&quot;userId&quot;))); map.put(&quot;entityType&quot;, data.get(&quot;entityType&quot;)); map.put(&quot;entityId&quot;, data.get(&quot;entityId&quot;)); map.put(&quot;postId&quot;, data.get(&quot;postId&quot;)); map.put(&quot;fromUser&quot;, userService.findUserById(notice.getFromId())); noticeVoList.add(map); } } model.addAttribute(&quot;notices&quot;, noticeVoList); //设置为已读 List&lt;Integer&gt; ids = getLetterIds(noticeList); if (!ids.isEmpty()) { messageService.readMessage(ids); } return &quot;site/notice-detail&quot;; } 头部总未读消息数量 使用拦截器 @Component public class MessageInterceptor implements HandlerInterceptor { @Autowired private HostHolder hostHolder; @Autowired private MessageService messageService; @Override public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) { User user = hostHolder.getUser(); if (user != null &amp;&amp; modelAndView != null) { int letterUnreadCount = messageService.findUnreadCount(user.getId(), null); int noticeUnreadCount = messageService.findNoticeUnreadCount(user.getId(), null); modelAndView.addObject(&quot;allUnreadCount&quot;, letterUnreadCount + noticeUnreadCount); } } } 在配置类中配置即可。","@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  <link type="application/atom+xml" rel="alternate" href="https://github.com/tietietietie/tietietietie.github.io/feed.xml" title="tie's blog" />
+
+  <link rel="shortcut icon" type="image/x-icon" href="/logo.png" />
+  <link rel="stylesheet" href="/assets/css/main.css" />
+</head><body a="auto">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        <a href="/">..</a>
+
+<article>
+  <p class="post-meta">
+    <time datetime="2020-06-21 06:41:00 +0800">2020-06-21</time>
+  </p>
+  
+  <h1>社区论坛：Kafka处理系统通知</h1>
+
+  <h1 id="chapter-5">Chapter 5</h1>
+
+<h2 id="消息队列服务器">消息队列服务器</h2>
+
+<p>服务器发送消息给某一用户，而且操作频繁</p>
+
+<h3 id="阻塞队列">阻塞队列</h3>
+
+<p>JAVA自带API，解决线程通信问题，依靠put,take</p>
+
+<p>生产者与消费者模式，Blocking Queue构建了一个桥梁，能够解决生产速度/消费速度不匹配问题。阻塞的时候只是在那里等着，但是不会占用CPU资源，对性能不会有影响。</p>
+
+<p>Blocking Queue底层有多种实现方式，举例ArrayBlockingQueue。</p>
+
+<p>分别定义一个生产者和三个消费者，其中生产者生产速度快，消费者消费速度慢，生产者和消费者共用一个阻塞队列</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">BlockingQueueTests</span> <span class="o">{</span>
+
+    <span class="kd">public</span> <span class="kd">static</span> <span class="kt">void</span> <span class="nf">main</span><span class="o">(</span><span class="nc">String</span><span class="o">[]</span> <span class="n">args</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">BlockingQueue</span><span class="o">&lt;</span><span class="nc">Integer</span><span class="o">&gt;</span> <span class="n">blockingQueue</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ArrayBlockingQueue</span><span class="o">&lt;&gt;(</span><span class="mi">10</span><span class="o">);</span>
+        <span class="k">new</span> <span class="nf">Thread</span><span class="o">(</span><span class="k">new</span> <span class="nc">Producer</span><span class="o">(</span><span class="n">blockingQueue</span><span class="o">)).</span><span class="na">start</span><span class="o">();</span>
+        <span class="k">new</span> <span class="nf">Thread</span><span class="o">(</span><span class="k">new</span> <span class="nc">Consumer</span><span class="o">(</span><span class="n">blockingQueue</span><span class="o">)).</span><span class="na">start</span><span class="o">();</span>
+        <span class="k">new</span> <span class="nf">Thread</span><span class="o">(</span><span class="k">new</span> <span class="nc">Consumer</span><span class="o">(</span><span class="n">blockingQueue</span><span class="o">)).</span><span class="na">start</span><span class="o">();</span>
+        <span class="k">new</span> <span class="nf">Thread</span><span class="o">(</span><span class="k">new</span> <span class="nc">Consumer</span><span class="o">(</span><span class="n">blockingQueue</span><span class="o">)).</span><span class="na">start</span><span class="o">();</span>
+    <span class="o">}</span>
+
+<span class="o">}</span>
+
+<span class="kd">class</span> <span class="nc">Producer</span> <span class="kd">implements</span> <span class="nc">Runnable</span> <span class="o">{</span>
+    <span class="kd">private</span> <span class="nc">BlockingQueue</span><span class="o">&lt;</span><span class="nc">Integer</span><span class="o">&gt;</span> <span class="n">blockingQueue</span><span class="o">;</span>
+
+    <span class="kd">public</span> <span class="nf">Producer</span><span class="o">(</span><span class="nc">BlockingQueue</span><span class="o">&lt;</span><span class="nc">Integer</span><span class="o">&gt;</span> <span class="n">blockingQueue</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">blockingQueue</span> <span class="o">=</span> <span class="n">blockingQueue</span><span class="o">;</span>
+    <span class="o">}</span>
+
+
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">run</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">for</span> <span class="o">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="o">;</span> <span class="n">i</span><span class="o">++)</span> <span class="o">{</span>
+            <span class="k">try</span> <span class="o">{</span>
+                <span class="nc">Thread</span><span class="o">.</span><span class="na">sleep</span><span class="o">(</span><span class="mi">20</span><span class="o">);</span>
+                <span class="n">blockingQueue</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="n">i</span><span class="o">);</span>
+                <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="nc">Thread</span><span class="o">.</span><span class="na">currentThread</span><span class="o">().</span><span class="na">getName</span><span class="o">()</span> <span class="o">+</span> <span class="s">"当前生产："</span> <span class="o">+</span> <span class="n">i</span> <span class="o">+</span> <span class="s">"共"</span> <span class="o">+</span> <span class="n">blockingQueue</span><span class="o">.</span><span class="na">size</span><span class="o">()</span> <span class="o">+</span> <span class="s">"个。"</span><span class="o">);</span>
+            <span class="o">}</span> <span class="k">catch</span> <span class="o">(</span><span class="nc">Exception</span> <span class="n">e</span><span class="o">)</span> <span class="o">{</span>
+                <span class="n">e</span><span class="o">.</span><span class="na">getStackTrace</span><span class="o">();</span>
+            <span class="o">}</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="kd">class</span> <span class="nc">Consumer</span> <span class="kd">implements</span> <span class="nc">Runnable</span> <span class="o">{</span>
+    <span class="kd">private</span> <span class="nc">BlockingQueue</span><span class="o">&lt;</span><span class="nc">Integer</span><span class="o">&gt;</span> <span class="n">blockingQueue</span><span class="o">;</span>
+
+    <span class="kd">public</span> <span class="nf">Consumer</span><span class="o">(</span><span class="nc">BlockingQueue</span><span class="o">&lt;</span><span class="nc">Integer</span><span class="o">&gt;</span> <span class="n">blockingQueue</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">blockingQueue</span> <span class="o">=</span> <span class="n">blockingQueue</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">run</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">while</span> <span class="o">(</span><span class="kc">true</span><span class="o">)</span> <span class="o">{</span>
+            <span class="k">try</span> <span class="o">{</span>
+                <span class="nc">Thread</span><span class="o">.</span><span class="na">sleep</span><span class="o">(</span><span class="k">new</span> <span class="nc">Random</span><span class="o">().</span><span class="na">nextInt</span><span class="o">(</span><span class="mi">1000</span><span class="o">));</span>
+                <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="n">blockingQueue</span><span class="o">.</span><span class="na">take</span><span class="o">();</span>
+                <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="nc">Thread</span><span class="o">.</span><span class="na">currentThread</span><span class="o">().</span><span class="na">getName</span><span class="o">()</span> <span class="o">+</span> <span class="s">"当前消费："</span> <span class="o">+</span> <span class="n">i</span> <span class="o">+</span> <span class="s">"共"</span> <span class="o">+</span> <span class="n">blockingQueue</span><span class="o">.</span><span class="na">size</span><span class="o">()</span> <span class="o">+</span> <span class="s">"个。"</span><span class="o">);</span>
+            <span class="o">}</span> <span class="k">catch</span> <span class="o">(</span><span class="nc">Exception</span> <span class="n">e</span><span class="o">)</span> <span class="o">{</span>
+                <span class="n">e</span><span class="o">.</span><span class="na">getStackTrace</span><span class="o">();</span>
+            <span class="o">}</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h2 id="kafka入门">Kafka入门</h2>
+
+<ul>
+  <li>分布式的流处理平台，包括消息系统，日志收集，用户行为追踪，流式处理。</li>
+  <li>特点：高吞吐量，消息持久化（存在硬盘上）（长久保存）（对硬盘的顺序读写）（速度快），高可靠性（分布式），高扩展性（简单配置可增加服务器）</li>
+  <li>消息队列实现方式：点对点（每个消息只会消费一次），发布订阅模式</li>
+  <li>术语：
+    <ul>
+      <li>Broker：服务器</li>
+      <li>Zookeeper：独立软件，管理集群，Kafka可内置Zookeeper</li>
+      <li>Topic：空间，相当于文件夹，存放消息</li>
+      <li>Partition：将Topic分区，可以多线程同时写数据，</li>
+      <li>Offset，消息在partition中存放位置</li>
+      <li>Leader Replica：主副本，每个分区都有多个副本，可以提供消息</li>
+      <li>Follower Replica：从副本，只是备份，不负责相应，主副本挂掉，选择一个从副本变为主副本。</li>
+    </ul>
+  </li>
+  <li>安装过程略</li>
+</ul>
+
+<p>启动zookeeper</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>bin\windows\zookeeper-server-start.bat config\zookeeper.properties
+</code></pre></div></div>
+
+<p>启动kafka</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>bin\windows\kafka-server-start.bat config\server.properties
+</code></pre></div></div>
+
+<p>创建主题（表示一种消息类别）</p>
+
+<h2 id="spring整合kafka">Spring整合Kafka</h2>
+
+<p>生产者发消息：主动</p>
+
+<p>消费者收到消息：被动</p>
+
+<p>演示：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@SpringBootTest</span>
+<span class="nd">@ContextConfiguration</span><span class="o">(</span><span class="n">classes</span> <span class="o">=</span> <span class="nc">CommunityApplication</span><span class="o">.</span><span class="na">class</span><span class="o">)</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">KafkaTests</span> <span class="o">{</span>
+
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">KafkaProducer</span> <span class="n">kafkaProducer</span><span class="o">;</span>
+
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">KafkaConsumer</span> <span class="n">kafkaConsumer</span><span class="o">;</span>
+
+    <span class="nd">@Test</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">testKafka</span><span class="o">()</span> <span class="o">{</span>
+        <span class="n">kafkaProducer</span><span class="o">.</span><span class="na">sendMessage</span><span class="o">(</span><span class="s">"test"</span><span class="o">,</span> <span class="s">"你好"</span><span class="o">);</span>
+        <span class="n">kafkaProducer</span><span class="o">.</span><span class="na">sendMessage</span><span class="o">(</span><span class="s">"test"</span><span class="o">,</span> <span class="s">"hello"</span><span class="o">);</span>
+        <span class="k">try</span> <span class="o">{</span>
+            <span class="nc">Thread</span><span class="o">.</span><span class="na">sleep</span><span class="o">(</span><span class="mi">1000</span> <span class="o">*</span> <span class="mi">10</span><span class="o">);</span>
+        <span class="o">}</span> <span class="k">catch</span> <span class="o">(</span><span class="nc">InterruptedException</span> <span class="n">e</span><span class="o">)</span> <span class="o">{</span>
+            <span class="n">e</span><span class="o">.</span><span class="na">printStackTrace</span><span class="o">();</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="nd">@Component</span>
+<span class="kd">class</span> <span class="nc">KafkaProducer</span> <span class="o">{</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">KafkaTemplate</span> <span class="n">kafkaTemplate</span><span class="o">;</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">sendMessage</span><span class="o">(</span><span class="nc">String</span> <span class="n">topic</span><span class="o">,</span> <span class="nc">String</span> <span class="n">context</span><span class="o">)</span> <span class="o">{</span>
+        <span class="n">kafkaTemplate</span><span class="o">.</span><span class="na">send</span><span class="o">(</span><span class="n">topic</span><span class="o">,</span> <span class="n">context</span><span class="o">);</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="nd">@Component</span>
+<span class="kd">class</span> <span class="nc">KafkaConsumer</span> <span class="o">{</span>
+    <span class="nd">@KafkaListener</span><span class="o">(</span><span class="n">topics</span> <span class="o">=</span> <span class="o">{</span><span class="s">"test"</span><span class="o">})</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">handleMessage</span><span class="o">(</span><span class="nc">ConsumerRecord</span> <span class="n">consumerRecord</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">consumerRecord</span><span class="o">.</span><span class="na">value</span><span class="o">());</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h2 id="发布系统通知">发布系统通知</h2>
+
+<p>点赞/评论/关注后，需要发布通知，系统发布通知是很频繁的功能。</p>
+
+<p>三类不同的topic，封装，事件发生后，生产者产生消息，消费者从队列中读到消息，从message表中写一条数据。</p>
+
+<ul>
+  <li>封装事件对象，对所需的数据进行封装（消费者可以用多种方式处理）</li>
+  <li>开发生产者（产生事件）</li>
+  <li>开发消费者（消费事件，放在message库中）</li>
+</ul>
+
+<p>补充：回复一共有三种：给帖子的回复，EntityType=1，给评论的回复：EntityType=2，给回复的回复：EntityType = 2，并且有targetId</p>
+
+<h3 id="封装事件">封装事件</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">Event</span> <span class="o">{</span>
+
+    <span class="kd">private</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">;</span>
+    <span class="kd">private</span> <span class="kt">int</span> <span class="n">userId</span><span class="o">;</span>
+    <span class="kd">private</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">;</span>
+    <span class="kd">private</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">;</span>
+    <span class="kd">private</span> <span class="kt">int</span> <span class="n">entityUserId</span><span class="o">;</span>
+    <span class="kd">private</span> <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">getTopic</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="n">topic</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Event</span> <span class="nf">setTopic</span><span class="o">(</span><span class="nc">String</span> <span class="n">topic</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">topic</span> <span class="o">=</span> <span class="n">topic</span><span class="o">;</span>
+        <span class="k">return</span> <span class="k">this</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">int</span> <span class="nf">getUserId</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="n">userId</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Event</span> <span class="nf">setUserId</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">userId</span> <span class="o">=</span> <span class="n">userId</span><span class="o">;</span>
+        <span class="k">return</span> <span class="k">this</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">int</span> <span class="nf">getEntityType</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="n">entityType</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Event</span> <span class="nf">setEntityType</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">entityType</span> <span class="o">=</span> <span class="n">entityType</span><span class="o">;</span>
+        <span class="k">return</span> <span class="k">this</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">int</span> <span class="nf">getEntityId</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="n">entityId</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Event</span> <span class="nf">setEntityId</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">entityId</span> <span class="o">=</span> <span class="n">entityId</span><span class="o">;</span>
+        <span class="k">return</span> <span class="k">this</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">int</span> <span class="nf">getEntityUserId</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="n">entityUserId</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Event</span> <span class="nf">setEntityUserId</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityUserId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">entityUserId</span> <span class="o">=</span> <span class="n">entityUserId</span><span class="o">;</span>
+        <span class="k">return</span> <span class="k">this</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="nf">getData</span><span class="o">()</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="n">data</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="nc">Event</span> <span class="nf">setData</span><span class="o">(</span><span class="nc">String</span> <span class="n">key</span><span class="o">,</span> <span class="nc">Object</span> <span class="n">value</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">data</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="n">key</span><span class="o">,</span> <span class="n">value</span><span class="o">);</span>
+        <span class="k">return</span> <span class="k">this</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="定义生产者和消费者">定义生产者和消费者</h3>
+
+<p>生产者</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Component</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">EventProducer</span> <span class="o">{</span>
+
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">KafkaTemplate</span> <span class="n">kafkaTemplate</span><span class="o">;</span>
+
+    <span class="c1">//处理事件</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">fireEvent</span><span class="o">(</span><span class="nc">Event</span> <span class="n">event</span><span class="o">)</span> <span class="o">{</span>
+        <span class="c1">//将之间发送指定主题</span>
+        <span class="n">kafkaTemplate</span><span class="o">.</span><span class="na">send</span><span class="o">(</span><span class="n">event</span><span class="o">.</span><span class="na">getTopic</span><span class="o">(),</span> <span class="nc">JSONObject</span><span class="o">.</span><span class="na">toJSONString</span><span class="o">(</span><span class="n">event</span><span class="o">));</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>消费者：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@KafkaListener</span><span class="o">(</span><span class="n">topics</span> <span class="o">=</span> <span class="o">{</span><span class="no">TOPIC_COMMENT</span><span class="o">,</span> <span class="no">TOPIC_LIKE</span><span class="o">,</span> <span class="no">TOPIC_FOLLOW</span><span class="o">})</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">handleCommentMessage</span><span class="o">(</span><span class="nc">ConsumerRecord</span> <span class="n">record</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">if</span> <span class="o">(</span><span class="n">record</span> <span class="o">==</span> <span class="kc">null</span> <span class="o">||</span> <span class="n">record</span><span class="o">.</span><span class="na">value</span><span class="o">()</span> <span class="o">==</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+        <span class="n">logger</span><span class="o">.</span><span class="na">error</span><span class="o">(</span><span class="s">"消息内容为空"</span><span class="o">);</span>
+        <span class="k">return</span><span class="o">;</span>
+    <span class="o">}</span>
+    <span class="nc">Event</span> <span class="n">event</span> <span class="o">=</span> <span class="nc">JSONObject</span><span class="o">.</span><span class="na">parseObject</span><span class="o">(</span><span class="n">record</span><span class="o">.</span><span class="na">value</span><span class="o">().</span><span class="na">toString</span><span class="o">(),</span> <span class="nc">Event</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
+    <span class="k">if</span> <span class="o">(</span><span class="n">event</span> <span class="o">==</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+        <span class="n">logger</span><span class="o">.</span><span class="na">error</span><span class="o">(</span><span class="s">"消息格式错误"</span><span class="o">);</span>
+        <span class="k">return</span><span class="o">;</span>
+    <span class="o">}</span>
+    <span class="c1">//构造meaage对象</span>
+    <span class="nc">Message</span> <span class="n">message</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Message</span><span class="o">();</span>
+    <span class="n">message</span><span class="o">.</span><span class="na">setFromId</span><span class="o">(</span><span class="no">SYSTEM_USER_ID</span><span class="o">);</span>
+    <span class="n">message</span><span class="o">.</span><span class="na">setToId</span><span class="o">(</span><span class="n">event</span><span class="o">.</span><span class="na">getEntityUserId</span><span class="o">());</span>
+    <span class="n">message</span><span class="o">.</span><span class="na">setConversationId</span><span class="o">(</span><span class="n">event</span><span class="o">.</span><span class="na">getTopic</span><span class="o">());</span>
+    <span class="n">message</span><span class="o">.</span><span class="na">setCreateTime</span><span class="o">(</span><span class="k">new</span> <span class="nc">Date</span><span class="o">());</span>
+    <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">content</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+    <span class="n">content</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"userId"</span><span class="o">,</span> <span class="n">event</span><span class="o">.</span><span class="na">getUserId</span><span class="o">());</span>
+    <span class="n">content</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">,</span> <span class="n">event</span><span class="o">.</span><span class="na">getEntityType</span><span class="o">());</span>
+    <span class="n">content</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">,</span> <span class="n">event</span><span class="o">.</span><span class="na">getEntityId</span><span class="o">());</span>
+    <span class="k">if</span> <span class="o">(!</span><span class="n">event</span><span class="o">.</span><span class="na">getData</span><span class="o">().</span><span class="na">isEmpty</span><span class="o">())</span> <span class="o">{</span>
+        <span class="k">for</span> <span class="o">(</span><span class="nc">Map</span><span class="o">.</span><span class="na">Entry</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">entry</span> <span class="o">:</span> <span class="n">event</span><span class="o">.</span><span class="na">getData</span><span class="o">().</span><span class="na">entrySet</span><span class="o">())</span> <span class="o">{</span>
+            <span class="n">content</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="n">entry</span><span class="o">.</span><span class="na">getKey</span><span class="o">(),</span> <span class="n">entry</span><span class="o">.</span><span class="na">getValue</span><span class="o">());</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+    <span class="n">message</span><span class="o">.</span><span class="na">setContent</span><span class="o">(</span><span class="nc">JSONObject</span><span class="o">.</span><span class="na">toJSONString</span><span class="o">(</span><span class="n">content</span><span class="o">));</span>
+    <span class="n">messageService</span><span class="o">.</span><span class="na">addMessage</span><span class="o">(</span><span class="n">message</span><span class="o">);</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="在关注点赞评论的controller中生产对应事件">在关注/点赞/评论的controller中，生产对应事件</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nc">Event</span> <span class="n">event</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Event</span><span class="o">()</span>
+    <span class="o">.</span><span class="na">setTopic</span><span class="o">(</span><span class="no">TOPIC_COMMENT</span><span class="o">)</span>
+    <span class="o">.</span><span class="na">setEntityType</span><span class="o">(</span><span class="n">comment</span><span class="o">.</span><span class="na">getEntityType</span><span class="o">())</span>
+    <span class="o">.</span><span class="na">setEntityId</span><span class="o">(</span><span class="n">comment</span><span class="o">.</span><span class="na">getEntityType</span><span class="o">())</span>
+    <span class="o">.</span><span class="na">setUserId</span><span class="o">(</span><span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">().</span><span class="na">getId</span><span class="o">())</span>
+    <span class="o">.</span><span class="na">setData</span><span class="o">(</span><span class="s">"postId"</span><span class="o">,</span> <span class="n">discussPostId</span><span class="o">);</span>
+<span class="k">if</span> <span class="o">(</span><span class="n">comment</span><span class="o">.</span><span class="na">getEntityType</span><span class="o">()</span> <span class="o">==</span> <span class="no">ENTITY_TYPE_POST</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">DiscussPost</span> <span class="n">post</span> <span class="o">=</span> <span class="n">discussPostService</span><span class="o">.</span><span class="na">findDiscussPostById</span><span class="o">(</span><span class="n">comment</span><span class="o">.</span><span class="na">getEntityId</span><span class="o">());</span>
+    <span class="n">event</span><span class="o">.</span><span class="na">setEntityUserId</span><span class="o">(</span><span class="n">post</span><span class="o">.</span><span class="na">getUserId</span><span class="o">());</span>
+<span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+    <span class="nc">Comment</span> <span class="n">target</span> <span class="o">=</span> <span class="n">commentService</span><span class="o">.</span><span class="na">findCommentById</span><span class="o">(</span><span class="n">comment</span><span class="o">.</span><span class="na">getEntityId</span><span class="o">());</span>
+    <span class="n">event</span><span class="o">.</span><span class="na">setEntityUserId</span><span class="o">(</span><span class="n">target</span><span class="o">.</span><span class="na">getUserId</span><span class="o">());</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="o">(</span><span class="n">likeStatus</span> <span class="o">==</span> <span class="mi">1</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">Event</span> <span class="n">event</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Event</span><span class="o">()</span>
+        <span class="o">.</span><span class="na">setTopic</span><span class="o">(</span><span class="no">TOPIC_LIKE</span><span class="o">)</span>
+        <span class="o">.</span><span class="na">setUserId</span><span class="o">(</span><span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">().</span><span class="na">getId</span><span class="o">())</span>
+        <span class="o">.</span><span class="na">setEntityType</span><span class="o">(</span><span class="n">entityType</span><span class="o">)</span>
+        <span class="o">.</span><span class="na">setEntityId</span><span class="o">(</span><span class="n">entityId</span><span class="o">)</span>
+        <span class="o">.</span><span class="na">setEntityUserId</span><span class="o">(</span><span class="n">entityUserId</span><span class="o">)</span>
+        <span class="o">.</span><span class="na">setData</span><span class="o">(</span><span class="s">"postId"</span><span class="o">,</span> <span class="n">postId</span><span class="o">);</span>
+    <span class="n">eventProducer</span><span class="o">.</span><span class="na">fireEvent</span><span class="o">(</span><span class="n">event</span><span class="o">);</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nc">Event</span> <span class="n">event</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Event</span><span class="o">()</span>
+    <span class="o">.</span><span class="na">setTopic</span><span class="o">(</span><span class="no">TOPIC_FOLLOW</span><span class="o">)</span>
+    <span class="o">.</span><span class="na">setEntityType</span><span class="o">(</span><span class="n">entityType</span><span class="o">)</span>
+    <span class="o">.</span><span class="na">setEntityId</span><span class="o">(</span><span class="n">entityId</span><span class="o">)</span>
+    <span class="o">.</span><span class="na">setEntityUserId</span><span class="o">(</span><span class="n">entityId</span><span class="o">);</span>
+<span class="n">eventProducer</span><span class="o">.</span><span class="na">fireEvent</span><span class="o">(</span><span class="n">event</span><span class="o">);</span>
+</code></pre></div></div>
+
+<h2 id="显示系统通知">显示系统通知</h2>
+
+<ul>
+  <li>开发通知列表：三类通知，评论/点赞/关注</li>
+  <li>开发通知详情，能显示某类通知的详情页面</li>
+  <li>未读消息：头部的未读消息 = 未读私信 + 未读通知</li>
+</ul>
+
+<h3 id="实现通知列表">实现通知列表</h3>
+
+<h4 id="数据访问层">数据访问层</h4>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//某个主题下的最新通知（最新通知）</span>
+<span class="nc">Message</span> <span class="nf">selectLatestNotice</span><span class="o">(</span><span class="nd">@Param</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nd">@Param</span><span class="o">(</span><span class="s">"topic"</span><span class="o">)</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">);</span>
+
+<span class="c1">//某个主题包含的通知数量（显示数量）</span>
+<span class="kt">int</span> <span class="nf">selectNoticeCount</span><span class="o">(</span><span class="nd">@Param</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nd">@Param</span><span class="o">(</span><span class="s">"topic"</span><span class="o">)</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">);</span>
+
+<span class="c1">//查询未读通知数量</span>
+<span class="c1">//如果不穿topic，则查所有</span>
+<span class="kt">int</span> <span class="nf">selectNoticeUnreadCount</span><span class="o">(</span><span class="nd">@Param</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nd">@Param</span><span class="o">(</span><span class="s">"topic"</span><span class="o">)</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">);</span>
+</code></pre></div></div>
+
+<h4 id="服务层">服务层</h4>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//查询通知</span>
+<span class="kd">public</span> <span class="nc">Message</span> <span class="nf">findLatestNotice</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="n">messageMapper</span><span class="o">.</span><span class="na">selectLatestNotice</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">topic</span><span class="o">);</span>
+<span class="o">}</span>
+
+<span class="c1">//查询消息数量</span>
+<span class="kd">public</span> <span class="kt">int</span> <span class="nf">findNoticeCount</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="n">messageMapper</span><span class="o">.</span><span class="na">selectNoticeCount</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">topic</span><span class="o">);</span>
+<span class="o">}</span>
+
+<span class="c1">//查询未读消息数量</span>
+<span class="kd">public</span> <span class="kt">int</span> <span class="nf">findNoticeUnreadCount</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="n">messageMapper</span><span class="o">.</span><span class="na">selectNoticeUnreadCount</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">topic</span><span class="o">);</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h4 id="控制层">控制层</h4>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/notice/list"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">GET</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">getNoticeList</span><span class="o">(</span><span class="nc">Model</span> <span class="n">model</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">();</span>
+        <span class="c1">//查询评论类通知</span>
+        <span class="nc">Message</span> <span class="n">message</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findLatestNotice</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_COMMENT</span><span class="o">);</span>
+        <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">messageVO</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+        <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"message"</span><span class="o">,</span> <span class="n">message</span><span class="o">);</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">message</span> <span class="o">!=</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+            <span class="c1">//还原content</span>
+            <span class="nc">String</span> <span class="n">content</span> <span class="o">=</span> <span class="nc">HtmlUtils</span><span class="o">.</span><span class="na">htmlUnescape</span><span class="o">(</span><span class="n">message</span><span class="o">.</span><span class="na">getContent</span><span class="o">());</span>
+            <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="nc">JSONObject</span><span class="o">.</span><span class="na">parseObject</span><span class="o">(</span><span class="n">content</span><span class="o">,</span> <span class="nc">HashMap</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"user"</span><span class="o">,</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">((</span><span class="nc">Integer</span><span class="o">)</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)));</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">));</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">));</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"postId"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"postId"</span><span class="o">));</span>
+
+            <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_COMMENT</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"count"</span><span class="o">,</span> <span class="n">count</span><span class="o">);</span>
+            <span class="kt">int</span> <span class="n">unreadCount</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeUnreadCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_COMMENT</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"unread"</span><span class="o">,</span> <span class="n">unreadCount</span><span class="o">);</span>
+        <span class="o">}</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"commentNotice"</span><span class="o">,</span> <span class="n">messageVO</span><span class="o">);</span>
+
+        <span class="c1">//查询点赞类通知</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findLatestNotice</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_LIKE</span><span class="o">);</span>
+        <span class="n">messageVO</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+        <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"message"</span><span class="o">,</span> <span class="n">message</span><span class="o">);</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">message</span> <span class="o">!=</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+            <span class="c1">//还原content</span>
+            <span class="nc">String</span> <span class="n">content</span> <span class="o">=</span> <span class="nc">HtmlUtils</span><span class="o">.</span><span class="na">htmlUnescape</span><span class="o">(</span><span class="n">message</span><span class="o">.</span><span class="na">getContent</span><span class="o">());</span>
+            <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="nc">JSONObject</span><span class="o">.</span><span class="na">parseObject</span><span class="o">(</span><span class="n">content</span><span class="o">,</span> <span class="nc">HashMap</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"user"</span><span class="o">,</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">((</span><span class="nc">Integer</span><span class="o">)</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)));</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">));</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">));</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"postId"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"postId"</span><span class="o">));</span>
+
+            <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_LIKE</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"count"</span><span class="o">,</span> <span class="n">count</span><span class="o">);</span>
+            <span class="kt">int</span> <span class="n">unreadCount</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeUnreadCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_LIKE</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"unread"</span><span class="o">,</span> <span class="n">unreadCount</span><span class="o">);</span>
+        <span class="o">}</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"likeNotice"</span><span class="o">,</span> <span class="n">messageVO</span><span class="o">);</span>
+        <span class="c1">//查询关注类通知</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findLatestNotice</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_FOLLOW</span><span class="o">);</span>
+        <span class="n">messageVO</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+        <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"message"</span><span class="o">,</span> <span class="n">message</span><span class="o">);</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">message</span> <span class="o">!=</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+            <span class="c1">//还原content</span>
+            <span class="nc">String</span> <span class="n">content</span> <span class="o">=</span> <span class="nc">HtmlUtils</span><span class="o">.</span><span class="na">htmlUnescape</span><span class="o">(</span><span class="n">message</span><span class="o">.</span><span class="na">getContent</span><span class="o">());</span>
+            <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="nc">JSONObject</span><span class="o">.</span><span class="na">parseObject</span><span class="o">(</span><span class="n">content</span><span class="o">,</span> <span class="nc">HashMap</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"user"</span><span class="o">,</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">((</span><span class="nc">Integer</span><span class="o">)</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)));</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">));</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">));</span>
+
+            <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_FOLLOW</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"count"</span><span class="o">,</span> <span class="n">count</span><span class="o">);</span>
+            <span class="kt">int</span> <span class="n">unreadCount</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeUnreadCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="no">TOPIC_FOLLOW</span><span class="o">);</span>
+            <span class="n">messageVO</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"unread"</span><span class="o">,</span> <span class="n">unreadCount</span><span class="o">);</span>
+        <span class="o">}</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"followNotice"</span><span class="o">,</span> <span class="n">messageVO</span><span class="o">);</span>
+        <span class="c1">//查询未读消息数量</span>
+        <span class="kt">int</span> <span class="n">letterUnreadCount</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findUnreadCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="kc">null</span><span class="o">);</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"letterUnreadCount"</span><span class="o">,</span> <span class="n">letterUnreadCount</span><span class="o">);</span>
+        <span class="kt">int</span> <span class="n">noticeUnreadCount</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeUnreadCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="kc">null</span><span class="o">);</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"noticeUnreadCount"</span><span class="o">,</span> <span class="n">noticeUnreadCount</span><span class="o">);</span>
+        <span class="k">return</span> <span class="s">"/site/notice"</span><span class="o">;</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="实现通知详情">实现通知详情</h3>
+
+<h4 id="数据层">数据层</h4>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//查询某个主题的所有通知</span>
+    <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Message</span><span class="o">&gt;</span> <span class="nf">selectNotices</span><span class="o">(</span><span class="nd">@Param</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nd">@Param</span><span class="o">(</span><span class="s">"topic"</span><span class="o">)</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">,</span> <span class="nd">@Param</span><span class="o">(</span><span class="s">"offset"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">offset</span><span class="o">,</span> <span class="nd">@Param</span><span class="o">(</span><span class="s">"limit"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">limit</span><span class="o">);</span>
+</code></pre></div></div>
+
+<h4 id="服务层-1">服务层</h4>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//查询通知</span>
+<span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Message</span><span class="o">&gt;</span> <span class="nf">findNotices</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">,</span> <span class="kt">int</span> <span class="n">offset</span><span class="o">,</span> <span class="kt">int</span> <span class="n">limit</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="n">messageMapper</span><span class="o">.</span><span class="na">selectNotices</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">topic</span><span class="o">,</span> <span class="n">offset</span><span class="o">,</span> <span class="n">limit</span><span class="o">);</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h4 id="控制层-1">控制层</h4>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/notice/detail/{topic}"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">GET</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">getNoticeDetail</span><span class="o">(</span><span class="nd">@PathVariable</span><span class="o">(</span><span class="s">"topic"</span><span class="o">)</span> <span class="nc">String</span> <span class="n">topic</span><span class="o">,</span> <span class="nc">Model</span> <span class="n">model</span><span class="o">,</span> <span class="nc">Page</span> <span class="n">page</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">();</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setPath</span><span class="o">(</span><span class="s">"/notice/detail/"</span> <span class="o">+</span> <span class="n">topic</span><span class="o">);</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setLimit</span><span class="o">(</span><span class="mi">5</span><span class="o">);</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setRows</span><span class="o">(</span><span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="n">topic</span><span class="o">));</span>
+
+        <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Message</span><span class="o">&gt;</span> <span class="n">noticeList</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNotices</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="n">topic</span><span class="o">,</span> <span class="n">page</span><span class="o">.</span><span class="na">getOffset</span><span class="o">(),</span> <span class="n">page</span><span class="o">.</span><span class="na">getLimit</span><span class="o">());</span>
+        <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;&gt;</span> <span class="n">noticeVoList</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ArrayList</span><span class="o">&lt;&gt;();</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">noticeList</span> <span class="o">!=</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+            <span class="k">for</span> <span class="o">(</span><span class="nc">Message</span> <span class="n">notice</span> <span class="o">:</span> <span class="n">noticeList</span><span class="o">)</span> <span class="o">{</span>
+                <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">map</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"notice"</span><span class="o">,</span> <span class="n">notice</span><span class="o">);</span>
+
+                <span class="nc">String</span> <span class="n">content</span> <span class="o">=</span> <span class="nc">HtmlUtils</span><span class="o">.</span><span class="na">htmlUnescape</span><span class="o">(</span><span class="n">notice</span><span class="o">.</span><span class="na">getContent</span><span class="o">());</span>
+                <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="nc">JSONObject</span><span class="o">.</span><span class="na">parseObject</span><span class="o">(</span><span class="n">content</span><span class="o">,</span> <span class="nc">HashMap</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"user"</span><span class="o">,</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">((</span><span class="nc">Integer</span><span class="o">)</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)));</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"entityType"</span><span class="o">));</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"entityId"</span><span class="o">));</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"postId"</span><span class="o">,</span> <span class="n">data</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"postId"</span><span class="o">));</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"fromUser"</span><span class="o">,</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">(</span><span class="n">notice</span><span class="o">.</span><span class="na">getFromId</span><span class="o">()));</span>
+                <span class="n">noticeVoList</span><span class="o">.</span><span class="na">add</span><span class="o">(</span><span class="n">map</span><span class="o">);</span>
+            <span class="o">}</span>
+        <span class="o">}</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"notices"</span><span class="o">,</span> <span class="n">noticeVoList</span><span class="o">);</span>
+        <span class="c1">//设置为已读</span>
+        <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Integer</span><span class="o">&gt;</span> <span class="n">ids</span> <span class="o">=</span> <span class="n">getLetterIds</span><span class="o">(</span><span class="n">noticeList</span><span class="o">);</span>
+        <span class="k">if</span> <span class="o">(!</span><span class="n">ids</span><span class="o">.</span><span class="na">isEmpty</span><span class="o">())</span> <span class="o">{</span>
+            <span class="n">messageService</span><span class="o">.</span><span class="na">readMessage</span><span class="o">(</span><span class="n">ids</span><span class="o">);</span>
+        <span class="o">}</span>
+        <span class="k">return</span> <span class="s">"site/notice-detail"</span><span class="o">;</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="头部总未读消息数量">头部总未读消息数量</h3>
+
+<p>使用拦截器</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Component</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">MessageInterceptor</span> <span class="kd">implements</span> <span class="nc">HandlerInterceptor</span> <span class="o">{</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">HostHolder</span> <span class="n">hostHolder</span><span class="o">;</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">MessageService</span> <span class="n">messageService</span><span class="o">;</span>
+
+    <span class="nd">@Override</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">postHandle</span><span class="o">(</span><span class="nc">HttpServletRequest</span> <span class="n">request</span><span class="o">,</span> <span class="nc">HttpServletResponse</span> <span class="n">response</span><span class="o">,</span> <span class="nc">Object</span> <span class="n">handler</span><span class="o">,</span> <span class="nc">ModelAndView</span> <span class="n">modelAndView</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">();</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">user</span> <span class="o">!=</span> <span class="kc">null</span> <span class="o">&amp;&amp;</span> <span class="n">modelAndView</span> <span class="o">!=</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+            <span class="kt">int</span> <span class="n">letterUnreadCount</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findUnreadCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="kc">null</span><span class="o">);</span>
+            <span class="kt">int</span> <span class="n">noticeUnreadCount</span> <span class="o">=</span> <span class="n">messageService</span><span class="o">.</span><span class="na">findNoticeUnreadCount</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="kc">null</span><span class="o">);</span>
+            <span class="n">modelAndView</span><span class="o">.</span><span class="na">addObject</span><span class="o">(</span><span class="s">"allUnreadCount"</span><span class="o">,</span> <span class="n">letterUnreadCount</span> <span class="o">+</span> <span class="n">noticeUnreadCount</span><span class="o">);</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>在配置类中配置即可。</p>
+
+</article>
+      </div>
+    </main>
+
+    
+  </body>
+</html>

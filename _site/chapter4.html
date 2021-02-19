@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>社区论坛：Redis优化</title>
+
+  <!-- Begin Jekyll SEO tag v2.6.1 -->
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="社区论坛：Redis优化" />
+<meta name="author" content="tie" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Chapter 4 Redies入门 NoSQL：不只是SQL Redis按照键值对存储，其中Key为String，Value支持多种数据结构 Redis将所有数据存放在内存，同时将数据按照快照（完全存储，恢复快）（耗时，阻塞）（不适合实时）/日志（AOF）（存命令）（实时）（体积大）（恢复速度慢）的形式保存在内存上，保证安全 使用简单，常用场景：缓存，排行榜（热门帖子缓存），计数器（频繁更新访问量），社交网络（点赞/关注），消息队列 官网，学会操作数据的命令就可以使用了。 Spring整合Redis 步骤： 引入依赖spring-boot-starter-data-redis 配置Redis，配置数据库参数，编写配置类，构造RedisTemplate 访问Redis，使用redisTemplate.opsForValue()等函数 导入jar包 &lt;dependency&gt; &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt; &lt;artifactId&gt;spring-boot-starter-data-redis&lt;/artifactId&gt; &lt;version&gt;2.2.7.RELEASE&lt;/version&gt; &lt;/dependency&gt; 配置redis 配置文件： #redis spring.redis.database=11 spring.redis.host=localhost spring.redis.port=6379 配置类： @Configuration public class RedisConfig { @Bean public RedisTemplate&lt;String, Object&gt; redisTemplate(RedisConnectionFactory factory) { //注入连接工厂 RedisTemplate&lt;String, Object&gt; template = new RedisTemplate&lt;&gt;(); template.setConnectionFactory(factory); //设置key的序列化方式 template.setKeySerializer(RedisSerializer.string()); //设置普通的value的序列化方式 template.setValueSerializer(RedisSerializer.json()); //设置hash的key的序列化方式 template.setHashKeySerializer(RedisSerializer.string()); //设置hash的value的序列化方式 template.setHashValueSerializer(RedisSerializer.json()); //配置完后需要触发？？ template.afterPropertiesSet(); return template; } } 测试redis 测试Value类型访问方式： @Test public void testStrings() { String redisKey = &quot;test:count&quot;; redisTemplate.opsForValue().set(redisKey, 1); System.out.println(redisTemplate.opsForValue().get(redisKey)); System.out.println(redisTemplate.opsForValue().increment(redisKey)); System.out.println(redisTemplate.opsForValue().decrement(redisKey)); } 测试Hash类型的访问方式： @Test public void testHashes() { String redisKey = &quot;test:hash&quot;; redisTemplate.opsForHash().put(redisKey, &quot;id&quot;, 1); redisTemplate.opsForHash().put(redisKey, &quot;username&quot;, &quot;zhangsan&quot;); System.out.println(redisTemplate.opsForHash().get(redisKey, &quot;id&quot;)); System.out.println(redisTemplate.opsForHash().get(redisKey, &quot;username&quot;)); } 测试List类型访问方法： @Test public void testLists() { String redisKey = &quot;test:list&quot;; redisTemplate.opsForList().leftPush(redisKey, 101); redisTemplate.opsForList().leftPush(redisKey, 102); redisTemplate.opsForList().leftPush(redisKey, 103); System.out.println(redisTemplate.opsForList().size(redisKey)); System.out.println(redisTemplate.opsForList().index(redisKey, 1)); System.out.println(redisTemplate.opsForList().range(redisKey, 0, 2)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); } 测试Set类型访问方法： @Test public void testSets() { String redisKey = &quot;test:teachers&quot;; redisTemplate.opsForSet().add(redisKey, &quot;刘备&quot;, &quot;Andy&quot;, &quot;Selena&quot;, &quot;Shawn&quot;); System.out.println(redisTemplate.opsForSet().size(redisKey)); System.out.println(redisTemplate.opsForSet().pop(redisKey)); System.out.println(redisTemplate.opsForSet().members(redisKey)); } 测试排序set的访问方法 @Test public void testSortedSets() { String redisKey = &quot;test:students&quot;; redisTemplate.opsForZSet().add(redisKey, &quot;Linda&quot;, 92); redisTemplate.opsForZSet().add(redisKey, &quot;John&quot;, 86); redisTemplate.opsForZSet().add(redisKey, &quot;Thomas&quot;, 98); redisTemplate.opsForZSet().add(redisKey, &quot;Austin&quot;, 73); redisTemplate.opsForZSet().add(redisKey, &quot;Ben&quot;, 64); System.out.println(redisTemplate.opsForZSet().zCard(redisKey)); System.out.println(redisTemplate.opsForZSet().score(redisKey, &quot;John&quot;)); System.out.println(redisTemplate.opsForZSet().reverseRank(redisKey, &quot;John&quot;)); System.out.println(redisTemplate.opsForZSet().range(redisKey, 0, 2)); System.out.println(redisTemplate.opsForZSet().reverseRange(redisKey, 0, 2)); } 操作key的方法： @Test public void testKeys() { redisTemplate.delete(&quot;test:hash&quot;); System.out.println(redisTemplate.hasKey(&quot;test:hash&quot;)); redisTemplate.expire(&quot;test:students&quot;, 10, TimeUnit.SECONDS); } 当对某个key需要多次操作时，可以绑定 @Test public void testBoundOperations() { String redisKey = &quot;test:count&quot;; BoundValueOperations operations = redisTemplate.boundValueOps(redisKey); operations.increment(); operations.increment(); operations.increment(); operations.increment(); System.out.println(operations.get()); } Redis支持事务，redis将事务中所有操作入队，然后一次性执行，所以事务中一般不含有查询操作，并且使用编程式事务 @Test public void testTransactional() { Object obj = redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations redisOperations) throws DataAccessException { String redisKey = &quot;test:tx&quot;; //启用事务 redisOperations.multi(); redisOperations.opsForSet().add(redisKey, &quot;Hello&quot;); redisOperations.opsForSet().add(redisKey, &quot;World&quot;); //此查询无效，因为之前添加数据的操作都还没执行 System.out.println(redisOperations.opsForSet().members(redisKey)); //提交事务 return redisOperations.exec(); } }); System.out.println(obj); } 点赞 点赞为高频操作，可以使用redis存储数据，提高性能 对帖子点赞，对帖子的评论点赞 没赞点一下变成点赞，点赞了再点一下，变成没赞 需要统计点赞数量 数据访问层 不需要写，因为非常简单 服务层 写一个工具，专门生成redis的key public class RedisKeyUtil { private static final String SPLIT = &quot;:&quot;; private static final String PREFIX_ENTITY_LIKE = &quot;like:entity&quot;; //某个实体的赞 //like:entity:entityType:entityId -&gt; set(userId) public static String getEntityLikeKey(int entityType, int entityId) { return PREFIX_ENTITY_LIKE + SPLIT + entityType + SPLIT + entityId; } } 点赞/查询点赞数量/查询点赞状态 @Service public class LikeService { @Autowired private RedisTemplate redisTemplate; //点赞 public void like(int userId, int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); if (redisTemplate.opsForSet().isMember(entityLikeKey, userId)) { redisTemplate.opsForSet().remove(entityLikeKey, userId); } else { redisTemplate.opsForSet().add(entityLikeKey, userId); } } //查询实体点赞数量 public long findEntityLikeCount(int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); return redisTemplate.opsForSet().size(entityLikeKey); } //查询某人对某实体是否点过赞(int更具扩展性） public int findEntityLikeStatus(int userId, int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); return redisTemplate.opsForSet().isMember(entityLikeKey, userId) ? 1 : 0; } } 控制层 采用异步消息，进行点赞，返回点赞数量和点赞状态 @Controller public class LikeController { @Autowired private LikeService likeService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/like&quot;, method = RequestMethod.POST) @ResponseBody public String like(int entityType, int entityId) { User user = hostHolder.getUser(); likeService.like(user.getId(), entityType, entityId); long likeCount = likeService.findEntityLikeCount(entityType, entityId); int likeStatus = likeService.findEntityLikeStatus(user.getId(), entityType, entityId); Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); map.put(&quot;likeCount&quot;, likeCount); map.put(&quot;likeStatus&quot;, likeStatus); return CommunityUtil.getJSONString(0, null, map); } } 我收到的赞 个人主页上显示 重构点赞功能，点赞时，把点赞对象（用户）的赞加一。 开发个人主页 包括个人信息，以及收到的赞 修改RedisKeyUtil 每一个用户获得的赞，作为一个key存在redis中 private static final String PREFIC_USER_LIKE = &quot;like:user&quot;; //某个用户收获的赞 public static String getUserLikeKey(int userId) { return PREFIC_USER_LIKE + SPLIT + userId; } 修改likeService 需要保证事务性 public void like(int userId, int entityType, int entityId, int entityUserId) { // String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); // if (redisTemplate.opsForSet().isMember(entityLikeKey, userId)) { // redisTemplate.opsForSet().remove(entityLikeKey, userId); // } else { // redisTemplate.opsForSet().add(entityLikeKey, userId); // } //更新某用户的赞，需要保证事务性 redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); String userLikeKey = RedisKeyUtil.getUserLikeKey(entityUserId); boolean isMember = operations.opsForSet().isMember(entityLikeKey, userId); //开启事务 operations.multi(); if (isMember) { operations.opsForSet().remove(entityLikeKey, userId); operations.opsForValue().decrement(userLikeKey); } else { operations.opsForSet().add(entityLikeKey, userId); operations.opsForValue().increment(userLikeKey); } return operations.exec(); } }); } 修改Controller，点赞对象id作为参数传入 代码略 修改用户个人主页代码，显示赞 代码略 关注/取消关注 实现关注/取关功能 统计关注数/粉丝数 A关注B，A是B的粉丝，B是A的关注者，A是B的follower，B是A的followee 关注的目标不能写死，可以关注用户或者帖子等抽象实体 分为两部：实现关注/去关，统计关注数量，粉丝数量 定义RedisKeyUtil //某个用户的关注实体 //followee:userId:entityType -&gt; zSet(entityId,time) public static String getFolloweeKey(int userId, int entityType) { return PREFIX_FOLLOWEE + SPLIT + userId + SPLIT + entityType; } //某个用户的粉丝 //follower:entityType:entityId -&gt; zSet(userId,time) public static String getFollowerKey(int entityType, int entityId) { return PREFIX_FOLLOWER + SPLIT + entityType + SPLIT + entityId; } 服务层 关注/粉丝，查询关注者数量，查询粉丝数量，查询当前用户对某用户的关注状态 @Service public class FollowService { @Autowired private RedisTemplate redisTemplate; public void follow(int userId, int entityType, int entityId) { redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); operations.multi(); operations.opsForZSet().add(followeeKey, entityId, System.currentTimeMillis()); operations.opsForZSet().add(followerKey, userId, System.currentTimeMillis()); return operations.exec(); } }); } public void unFollow(int userId, int entityType, int entityId) { redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); operations.multi(); operations.opsForZSet().remove(followeeKey, entityId); operations.opsForZSet().remove(followerKey, userId); return operations.exec(); } }); } //查询关注实体的数量 public long findFolloweeCount(int userId, int entityType) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); return redisTemplate.opsForZSet().size(followeeKey); } //查询粉丝数量 public long fingFollowerCount(int entityType, int entityId) { String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); return redisTemplate.opsForZSet().size(followerKey); } //显示关注状态 public boolean hasFollowed(int userId, int entityType, int entityId) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); Double status = redisTemplate.opsForZSet().score(followeeKey, entityId); return status != null; } } 控制层 在主页显示关注数量/粉丝数量/关注状态，并定义“关注”按钮 @Controller public class FollowController { @Autowired private FollowService followService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/follow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String follow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.follow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已关注&quot;); } @RequestMapping(path = &quot;/unfollow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String unfollow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.unFollow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已取消关注&quot;); } } @Controller public class FollowController { @Autowired private FollowService followService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/follow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String follow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.follow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已关注&quot;); } @RequestMapping(path = &quot;/unfollow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String unfollow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.unFollow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已取消关注&quot;); } } 关注列表/粉丝列表 已有有数据，展示即可。 业务层：查询某用户关注的人，以及粉丝，支持分页 表现层：处理请求，编写模板 服务层 获得某一用户的关注者/关注时间，粉丝/关注时间，放在map中，以list形式返回 //查询某个用户关注的人 public List&lt;Map&lt;String, Object&gt;&gt; findFollowees(int userId, int offset, int limit) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, ENTITY_TYPE_USER); Set&lt;Integer&gt; targetIds = redisTemplate.opsForZSet().reverseRange(followeeKey, offset, offset + limit - 1); if (targetIds != null &amp;&amp; !targetIds.isEmpty()) { List&lt;Map&lt;String, Object&gt;&gt; list = new ArrayList&lt;&gt;(); for (Integer targetId : targetIds) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); User user = userService.findUserById(targetId); map.put(&quot;user&quot;, user); Double score = redisTemplate.opsForZSet().score(followeeKey, targetId); map.put(&quot;followTime&quot;, new Date(score.longValue())); list.add(map); } return list; } return null; } //查询某用户的粉丝 public List&lt;Map&lt;String, Object&gt;&gt; findFollowers(int userId, int offset, int limit) { String followerKey = RedisKeyUtil.getFollowerKey(ENTITY_TYPE_USER, userId); //set虽然是无序的，但是redis做了内置处理，变得有序 Set&lt;Integer&gt; targetIds = redisTemplate.opsForZSet().reverseRange(followerKey, offset, offset + limit - 1); if (targetIds != null &amp;&amp; !targetIds.isEmpty()) { List&lt;Map&lt;String, Object&gt;&gt; list = new ArrayList&lt;&gt;(); for (Integer targetId : targetIds) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); User user = userService.findUserById(targetId); map.put(&quot;user&quot;, user); Double score = redisTemplate.opsForZSet().score(followerKey, targetId); map.put(&quot;followTime&quot;, new Date(score.longValue())); list.add(map); } return list; } return null; } 控制层 处理分页信息，以及判断当前用户是否关注了list中的用户,以及获得当前用户的信息 @RequestMapping(path = &quot;/followees/{userId}&quot;, method = RequestMethod.GET) public String getFollowees(@PathVariable(&quot;userId&quot;) int userId, Model model, Page page) { User user = userService.findUserById(userId); model.addAttribute(&quot;user&quot;, user); page.setLimit(5); page.setPath(&quot;/followees/&quot; + userId); page.setRows((int) followService.findFolloweeCount(userId, ENTITY_TYPE_USER)); List&lt;Map&lt;String, Object&gt;&gt; userList = followService.findFollowees(userId, page.getOffset(), page.getLimit()); if (userList != null &amp;&amp; !userList.isEmpty()) { for (Map&lt;String, Object&gt; map : userList) { User followee = (User) map.get(&quot;user&quot;); map.put(&quot;hasFollowed&quot;, hasFollowed(followee.getId())); } } model.addAttribute(&quot;users&quot;, userList); return &quot;site/followee&quot;; } private boolean hasFollowed(int userId) { if (hostHolder.getUser() == null) { return false; } return followService.hasFollowed(hostHolder.getUser().getId(), ENTITY_TYPE_USER, userId); } @RequestMapping(path = &quot;/followers/{userId}&quot;, method = RequestMethod.GET) public String getFollowers(@PathVariable(&quot;userId&quot;) int userId, Model model, Page page) { User user = userService.findUserById(userId); model.addAttribute(&quot;user&quot;, user); page.setLimit(5); page.setPath(&quot;/followers/&quot; + userId); page.setRows((int) followService.fingFollowerCount(ENTITY_TYPE_USER, userId)); List&lt;Map&lt;String, Object&gt;&gt; userList = followService.findFollowers(userId, page.getOffset(), page.getLimit()); if (userList != null &amp;&amp; !userList.isEmpty()) { for (Map&lt;String, Object&gt; map : userList) { User follower = (User) map.get(&quot;user&quot;); map.put(&quot;hasFollowed&quot;, hasFollowed(follower.getId())); } } model.addAttribute(&quot;users&quot;, userList); return &quot;site/follower&quot;; } 优化登录模块 使用redis存储验证码（因为频繁访问），而且不需要永久保存，存在session里有问题。 Redis处理登录凭证（ticket），（每次在拦截器里面查） 缓存用户信息，每次根据凭证查用户 Redis验证码 定义key //验证码 public static String getKaptchaKey(String owner) { return PREFIX_KAPTCHA + SPLIT + owner; } 生成验证码所有者，放在cookie中（类似于sessionID） //需要解决验证码的归属问题 String kaptchaOwner = CommunityUtil.generateUUID(); Cookie cookie = new Cookie(&quot;kaptchaOwner&quot;, kaptchaOwner); cookie.setMaxAge(60); cookie.setPath(contextPath); response.addCookie(cookie); //将验证码存入redis String redisKey = RedisKeyUtil.getKaptchaKey(kaptchaOwner); redisTemplate.opsForValue().set(redisKey, text, 60, TimeUnit.SECONDS); 检查验证码 //检查验证码 String kaptcha = null; if (StringUtils.isNotBlank(kaptchaOwner)) { String redisKey = RedisKeyUtil.getKaptchaKey(kaptchaOwner); kaptcha = (String) redisTemplate.opsForValue().get(redisKey); } Redis记录登录凭证 redis key //登录凭证 public static String getTicketKey(String ticket) { return PREFIX_TICKET + SPLIT + ticket; } Redis缓存用户信息 缓存时，如果取到，则取，不然，添加缓存，更新数据时，也要更新缓存（但是一般是直接删除，下次请求重查即可）（更新数据可能会有并发问题）。 优先缓存取值 取不到，初始化缓存 数据变化，清除缓存 在service层定义三个函数，分别初始化缓存，获得缓存，清除缓存 //从缓存中取数据 private User getCache(int userId) { String redisKey = RedisKeyUtil.getUserKey(userId); return (User) redisTemplate.opsForValue().get(redisKey); } //初始化缓存 private User initCache(int userId) { User user = userMapper.selectById(userId); String redisKey = RedisKeyUtil.getUserKey(userId); redisTemplate.opsForValue().set(redisKey, user, 3600, TimeUnit.SECONDS); return user; } //清除缓存 private void clearCache(int userId) { String redisKey = RedisKeyUtil.getUserKey(userId); redisTemplate.delete(redisKey); }" />
+<meta property="og:description" content="Chapter 4 Redies入门 NoSQL：不只是SQL Redis按照键值对存储，其中Key为String，Value支持多种数据结构 Redis将所有数据存放在内存，同时将数据按照快照（完全存储，恢复快）（耗时，阻塞）（不适合实时）/日志（AOF）（存命令）（实时）（体积大）（恢复速度慢）的形式保存在内存上，保证安全 使用简单，常用场景：缓存，排行榜（热门帖子缓存），计数器（频繁更新访问量），社交网络（点赞/关注），消息队列 官网，学会操作数据的命令就可以使用了。 Spring整合Redis 步骤： 引入依赖spring-boot-starter-data-redis 配置Redis，配置数据库参数，编写配置类，构造RedisTemplate 访问Redis，使用redisTemplate.opsForValue()等函数 导入jar包 &lt;dependency&gt; &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt; &lt;artifactId&gt;spring-boot-starter-data-redis&lt;/artifactId&gt; &lt;version&gt;2.2.7.RELEASE&lt;/version&gt; &lt;/dependency&gt; 配置redis 配置文件： #redis spring.redis.database=11 spring.redis.host=localhost spring.redis.port=6379 配置类： @Configuration public class RedisConfig { @Bean public RedisTemplate&lt;String, Object&gt; redisTemplate(RedisConnectionFactory factory) { //注入连接工厂 RedisTemplate&lt;String, Object&gt; template = new RedisTemplate&lt;&gt;(); template.setConnectionFactory(factory); //设置key的序列化方式 template.setKeySerializer(RedisSerializer.string()); //设置普通的value的序列化方式 template.setValueSerializer(RedisSerializer.json()); //设置hash的key的序列化方式 template.setHashKeySerializer(RedisSerializer.string()); //设置hash的value的序列化方式 template.setHashValueSerializer(RedisSerializer.json()); //配置完后需要触发？？ template.afterPropertiesSet(); return template; } } 测试redis 测试Value类型访问方式： @Test public void testStrings() { String redisKey = &quot;test:count&quot;; redisTemplate.opsForValue().set(redisKey, 1); System.out.println(redisTemplate.opsForValue().get(redisKey)); System.out.println(redisTemplate.opsForValue().increment(redisKey)); System.out.println(redisTemplate.opsForValue().decrement(redisKey)); } 测试Hash类型的访问方式： @Test public void testHashes() { String redisKey = &quot;test:hash&quot;; redisTemplate.opsForHash().put(redisKey, &quot;id&quot;, 1); redisTemplate.opsForHash().put(redisKey, &quot;username&quot;, &quot;zhangsan&quot;); System.out.println(redisTemplate.opsForHash().get(redisKey, &quot;id&quot;)); System.out.println(redisTemplate.opsForHash().get(redisKey, &quot;username&quot;)); } 测试List类型访问方法： @Test public void testLists() { String redisKey = &quot;test:list&quot;; redisTemplate.opsForList().leftPush(redisKey, 101); redisTemplate.opsForList().leftPush(redisKey, 102); redisTemplate.opsForList().leftPush(redisKey, 103); System.out.println(redisTemplate.opsForList().size(redisKey)); System.out.println(redisTemplate.opsForList().index(redisKey, 1)); System.out.println(redisTemplate.opsForList().range(redisKey, 0, 2)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); } 测试Set类型访问方法： @Test public void testSets() { String redisKey = &quot;test:teachers&quot;; redisTemplate.opsForSet().add(redisKey, &quot;刘备&quot;, &quot;Andy&quot;, &quot;Selena&quot;, &quot;Shawn&quot;); System.out.println(redisTemplate.opsForSet().size(redisKey)); System.out.println(redisTemplate.opsForSet().pop(redisKey)); System.out.println(redisTemplate.opsForSet().members(redisKey)); } 测试排序set的访问方法 @Test public void testSortedSets() { String redisKey = &quot;test:students&quot;; redisTemplate.opsForZSet().add(redisKey, &quot;Linda&quot;, 92); redisTemplate.opsForZSet().add(redisKey, &quot;John&quot;, 86); redisTemplate.opsForZSet().add(redisKey, &quot;Thomas&quot;, 98); redisTemplate.opsForZSet().add(redisKey, &quot;Austin&quot;, 73); redisTemplate.opsForZSet().add(redisKey, &quot;Ben&quot;, 64); System.out.println(redisTemplate.opsForZSet().zCard(redisKey)); System.out.println(redisTemplate.opsForZSet().score(redisKey, &quot;John&quot;)); System.out.println(redisTemplate.opsForZSet().reverseRank(redisKey, &quot;John&quot;)); System.out.println(redisTemplate.opsForZSet().range(redisKey, 0, 2)); System.out.println(redisTemplate.opsForZSet().reverseRange(redisKey, 0, 2)); } 操作key的方法： @Test public void testKeys() { redisTemplate.delete(&quot;test:hash&quot;); System.out.println(redisTemplate.hasKey(&quot;test:hash&quot;)); redisTemplate.expire(&quot;test:students&quot;, 10, TimeUnit.SECONDS); } 当对某个key需要多次操作时，可以绑定 @Test public void testBoundOperations() { String redisKey = &quot;test:count&quot;; BoundValueOperations operations = redisTemplate.boundValueOps(redisKey); operations.increment(); operations.increment(); operations.increment(); operations.increment(); System.out.println(operations.get()); } Redis支持事务，redis将事务中所有操作入队，然后一次性执行，所以事务中一般不含有查询操作，并且使用编程式事务 @Test public void testTransactional() { Object obj = redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations redisOperations) throws DataAccessException { String redisKey = &quot;test:tx&quot;; //启用事务 redisOperations.multi(); redisOperations.opsForSet().add(redisKey, &quot;Hello&quot;); redisOperations.opsForSet().add(redisKey, &quot;World&quot;); //此查询无效，因为之前添加数据的操作都还没执行 System.out.println(redisOperations.opsForSet().members(redisKey)); //提交事务 return redisOperations.exec(); } }); System.out.println(obj); } 点赞 点赞为高频操作，可以使用redis存储数据，提高性能 对帖子点赞，对帖子的评论点赞 没赞点一下变成点赞，点赞了再点一下，变成没赞 需要统计点赞数量 数据访问层 不需要写，因为非常简单 服务层 写一个工具，专门生成redis的key public class RedisKeyUtil { private static final String SPLIT = &quot;:&quot;; private static final String PREFIX_ENTITY_LIKE = &quot;like:entity&quot;; //某个实体的赞 //like:entity:entityType:entityId -&gt; set(userId) public static String getEntityLikeKey(int entityType, int entityId) { return PREFIX_ENTITY_LIKE + SPLIT + entityType + SPLIT + entityId; } } 点赞/查询点赞数量/查询点赞状态 @Service public class LikeService { @Autowired private RedisTemplate redisTemplate; //点赞 public void like(int userId, int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); if (redisTemplate.opsForSet().isMember(entityLikeKey, userId)) { redisTemplate.opsForSet().remove(entityLikeKey, userId); } else { redisTemplate.opsForSet().add(entityLikeKey, userId); } } //查询实体点赞数量 public long findEntityLikeCount(int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); return redisTemplate.opsForSet().size(entityLikeKey); } //查询某人对某实体是否点过赞(int更具扩展性） public int findEntityLikeStatus(int userId, int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); return redisTemplate.opsForSet().isMember(entityLikeKey, userId) ? 1 : 0; } } 控制层 采用异步消息，进行点赞，返回点赞数量和点赞状态 @Controller public class LikeController { @Autowired private LikeService likeService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/like&quot;, method = RequestMethod.POST) @ResponseBody public String like(int entityType, int entityId) { User user = hostHolder.getUser(); likeService.like(user.getId(), entityType, entityId); long likeCount = likeService.findEntityLikeCount(entityType, entityId); int likeStatus = likeService.findEntityLikeStatus(user.getId(), entityType, entityId); Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); map.put(&quot;likeCount&quot;, likeCount); map.put(&quot;likeStatus&quot;, likeStatus); return CommunityUtil.getJSONString(0, null, map); } } 我收到的赞 个人主页上显示 重构点赞功能，点赞时，把点赞对象（用户）的赞加一。 开发个人主页 包括个人信息，以及收到的赞 修改RedisKeyUtil 每一个用户获得的赞，作为一个key存在redis中 private static final String PREFIC_USER_LIKE = &quot;like:user&quot;; //某个用户收获的赞 public static String getUserLikeKey(int userId) { return PREFIC_USER_LIKE + SPLIT + userId; } 修改likeService 需要保证事务性 public void like(int userId, int entityType, int entityId, int entityUserId) { // String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); // if (redisTemplate.opsForSet().isMember(entityLikeKey, userId)) { // redisTemplate.opsForSet().remove(entityLikeKey, userId); // } else { // redisTemplate.opsForSet().add(entityLikeKey, userId); // } //更新某用户的赞，需要保证事务性 redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); String userLikeKey = RedisKeyUtil.getUserLikeKey(entityUserId); boolean isMember = operations.opsForSet().isMember(entityLikeKey, userId); //开启事务 operations.multi(); if (isMember) { operations.opsForSet().remove(entityLikeKey, userId); operations.opsForValue().decrement(userLikeKey); } else { operations.opsForSet().add(entityLikeKey, userId); operations.opsForValue().increment(userLikeKey); } return operations.exec(); } }); } 修改Controller，点赞对象id作为参数传入 代码略 修改用户个人主页代码，显示赞 代码略 关注/取消关注 实现关注/取关功能 统计关注数/粉丝数 A关注B，A是B的粉丝，B是A的关注者，A是B的follower，B是A的followee 关注的目标不能写死，可以关注用户或者帖子等抽象实体 分为两部：实现关注/去关，统计关注数量，粉丝数量 定义RedisKeyUtil //某个用户的关注实体 //followee:userId:entityType -&gt; zSet(entityId,time) public static String getFolloweeKey(int userId, int entityType) { return PREFIX_FOLLOWEE + SPLIT + userId + SPLIT + entityType; } //某个用户的粉丝 //follower:entityType:entityId -&gt; zSet(userId,time) public static String getFollowerKey(int entityType, int entityId) { return PREFIX_FOLLOWER + SPLIT + entityType + SPLIT + entityId; } 服务层 关注/粉丝，查询关注者数量，查询粉丝数量，查询当前用户对某用户的关注状态 @Service public class FollowService { @Autowired private RedisTemplate redisTemplate; public void follow(int userId, int entityType, int entityId) { redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); operations.multi(); operations.opsForZSet().add(followeeKey, entityId, System.currentTimeMillis()); operations.opsForZSet().add(followerKey, userId, System.currentTimeMillis()); return operations.exec(); } }); } public void unFollow(int userId, int entityType, int entityId) { redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); operations.multi(); operations.opsForZSet().remove(followeeKey, entityId); operations.opsForZSet().remove(followerKey, userId); return operations.exec(); } }); } //查询关注实体的数量 public long findFolloweeCount(int userId, int entityType) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); return redisTemplate.opsForZSet().size(followeeKey); } //查询粉丝数量 public long fingFollowerCount(int entityType, int entityId) { String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); return redisTemplate.opsForZSet().size(followerKey); } //显示关注状态 public boolean hasFollowed(int userId, int entityType, int entityId) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); Double status = redisTemplate.opsForZSet().score(followeeKey, entityId); return status != null; } } 控制层 在主页显示关注数量/粉丝数量/关注状态，并定义“关注”按钮 @Controller public class FollowController { @Autowired private FollowService followService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/follow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String follow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.follow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已关注&quot;); } @RequestMapping(path = &quot;/unfollow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String unfollow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.unFollow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已取消关注&quot;); } } @Controller public class FollowController { @Autowired private FollowService followService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/follow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String follow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.follow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已关注&quot;); } @RequestMapping(path = &quot;/unfollow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String unfollow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.unFollow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已取消关注&quot;); } } 关注列表/粉丝列表 已有有数据，展示即可。 业务层：查询某用户关注的人，以及粉丝，支持分页 表现层：处理请求，编写模板 服务层 获得某一用户的关注者/关注时间，粉丝/关注时间，放在map中，以list形式返回 //查询某个用户关注的人 public List&lt;Map&lt;String, Object&gt;&gt; findFollowees(int userId, int offset, int limit) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, ENTITY_TYPE_USER); Set&lt;Integer&gt; targetIds = redisTemplate.opsForZSet().reverseRange(followeeKey, offset, offset + limit - 1); if (targetIds != null &amp;&amp; !targetIds.isEmpty()) { List&lt;Map&lt;String, Object&gt;&gt; list = new ArrayList&lt;&gt;(); for (Integer targetId : targetIds) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); User user = userService.findUserById(targetId); map.put(&quot;user&quot;, user); Double score = redisTemplate.opsForZSet().score(followeeKey, targetId); map.put(&quot;followTime&quot;, new Date(score.longValue())); list.add(map); } return list; } return null; } //查询某用户的粉丝 public List&lt;Map&lt;String, Object&gt;&gt; findFollowers(int userId, int offset, int limit) { String followerKey = RedisKeyUtil.getFollowerKey(ENTITY_TYPE_USER, userId); //set虽然是无序的，但是redis做了内置处理，变得有序 Set&lt;Integer&gt; targetIds = redisTemplate.opsForZSet().reverseRange(followerKey, offset, offset + limit - 1); if (targetIds != null &amp;&amp; !targetIds.isEmpty()) { List&lt;Map&lt;String, Object&gt;&gt; list = new ArrayList&lt;&gt;(); for (Integer targetId : targetIds) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); User user = userService.findUserById(targetId); map.put(&quot;user&quot;, user); Double score = redisTemplate.opsForZSet().score(followerKey, targetId); map.put(&quot;followTime&quot;, new Date(score.longValue())); list.add(map); } return list; } return null; } 控制层 处理分页信息，以及判断当前用户是否关注了list中的用户,以及获得当前用户的信息 @RequestMapping(path = &quot;/followees/{userId}&quot;, method = RequestMethod.GET) public String getFollowees(@PathVariable(&quot;userId&quot;) int userId, Model model, Page page) { User user = userService.findUserById(userId); model.addAttribute(&quot;user&quot;, user); page.setLimit(5); page.setPath(&quot;/followees/&quot; + userId); page.setRows((int) followService.findFolloweeCount(userId, ENTITY_TYPE_USER)); List&lt;Map&lt;String, Object&gt;&gt; userList = followService.findFollowees(userId, page.getOffset(), page.getLimit()); if (userList != null &amp;&amp; !userList.isEmpty()) { for (Map&lt;String, Object&gt; map : userList) { User followee = (User) map.get(&quot;user&quot;); map.put(&quot;hasFollowed&quot;, hasFollowed(followee.getId())); } } model.addAttribute(&quot;users&quot;, userList); return &quot;site/followee&quot;; } private boolean hasFollowed(int userId) { if (hostHolder.getUser() == null) { return false; } return followService.hasFollowed(hostHolder.getUser().getId(), ENTITY_TYPE_USER, userId); } @RequestMapping(path = &quot;/followers/{userId}&quot;, method = RequestMethod.GET) public String getFollowers(@PathVariable(&quot;userId&quot;) int userId, Model model, Page page) { User user = userService.findUserById(userId); model.addAttribute(&quot;user&quot;, user); page.setLimit(5); page.setPath(&quot;/followers/&quot; + userId); page.setRows((int) followService.fingFollowerCount(ENTITY_TYPE_USER, userId)); List&lt;Map&lt;String, Object&gt;&gt; userList = followService.findFollowers(userId, page.getOffset(), page.getLimit()); if (userList != null &amp;&amp; !userList.isEmpty()) { for (Map&lt;String, Object&gt; map : userList) { User follower = (User) map.get(&quot;user&quot;); map.put(&quot;hasFollowed&quot;, hasFollowed(follower.getId())); } } model.addAttribute(&quot;users&quot;, userList); return &quot;site/follower&quot;; } 优化登录模块 使用redis存储验证码（因为频繁访问），而且不需要永久保存，存在session里有问题。 Redis处理登录凭证（ticket），（每次在拦截器里面查） 缓存用户信息，每次根据凭证查用户 Redis验证码 定义key //验证码 public static String getKaptchaKey(String owner) { return PREFIX_KAPTCHA + SPLIT + owner; } 生成验证码所有者，放在cookie中（类似于sessionID） //需要解决验证码的归属问题 String kaptchaOwner = CommunityUtil.generateUUID(); Cookie cookie = new Cookie(&quot;kaptchaOwner&quot;, kaptchaOwner); cookie.setMaxAge(60); cookie.setPath(contextPath); response.addCookie(cookie); //将验证码存入redis String redisKey = RedisKeyUtil.getKaptchaKey(kaptchaOwner); redisTemplate.opsForValue().set(redisKey, text, 60, TimeUnit.SECONDS); 检查验证码 //检查验证码 String kaptcha = null; if (StringUtils.isNotBlank(kaptchaOwner)) { String redisKey = RedisKeyUtil.getKaptchaKey(kaptchaOwner); kaptcha = (String) redisTemplate.opsForValue().get(redisKey); } Redis记录登录凭证 redis key //登录凭证 public static String getTicketKey(String ticket) { return PREFIX_TICKET + SPLIT + ticket; } Redis缓存用户信息 缓存时，如果取到，则取，不然，添加缓存，更新数据时，也要更新缓存（但是一般是直接删除，下次请求重查即可）（更新数据可能会有并发问题）。 优先缓存取值 取不到，初始化缓存 数据变化，清除缓存 在service层定义三个函数，分别初始化缓存，获得缓存，清除缓存 //从缓存中取数据 private User getCache(int userId) { String redisKey = RedisKeyUtil.getUserKey(userId); return (User) redisTemplate.opsForValue().get(redisKey); } //初始化缓存 private User initCache(int userId) { User user = userMapper.selectById(userId); String redisKey = RedisKeyUtil.getUserKey(userId); redisTemplate.opsForValue().set(redisKey, user, 3600, TimeUnit.SECONDS); return user; } //清除缓存 private void clearCache(int userId) { String redisKey = RedisKeyUtil.getUserKey(userId); redisTemplate.delete(redisKey); }" />
+<link rel="canonical" href="https://github.com/tietietietie/tietietietie.github.io/chapter4.html" />
+<meta property="og:url" content="https://github.com/tietietietie/tietietietie.github.io/chapter4.html" />
+<meta property="og:site_name" content="tie’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-06-09T06:52:00+08:00" />
+<script type="application/ld+json">
+{"url":"https://github.com/tietietietie/tietietietie.github.io/chapter4.html","headline":"社区论坛：Redis优化","dateModified":"2020-06-09T06:52:00+08:00","datePublished":"2020-06-09T06:52:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://github.com/tietietietie/tietietietie.github.io/chapter4.html"},"author":{"@type":"Person","name":"tie"},"description":"Chapter 4 Redies入门 NoSQL：不只是SQL Redis按照键值对存储，其中Key为String，Value支持多种数据结构 Redis将所有数据存放在内存，同时将数据按照快照（完全存储，恢复快）（耗时，阻塞）（不适合实时）/日志（AOF）（存命令）（实时）（体积大）（恢复速度慢）的形式保存在内存上，保证安全 使用简单，常用场景：缓存，排行榜（热门帖子缓存），计数器（频繁更新访问量），社交网络（点赞/关注），消息队列 官网，学会操作数据的命令就可以使用了。 Spring整合Redis 步骤： 引入依赖spring-boot-starter-data-redis 配置Redis，配置数据库参数，编写配置类，构造RedisTemplate 访问Redis，使用redisTemplate.opsForValue()等函数 导入jar包 &lt;dependency&gt; &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt; &lt;artifactId&gt;spring-boot-starter-data-redis&lt;/artifactId&gt; &lt;version&gt;2.2.7.RELEASE&lt;/version&gt; &lt;/dependency&gt; 配置redis 配置文件： #redis spring.redis.database=11 spring.redis.host=localhost spring.redis.port=6379 配置类： @Configuration public class RedisConfig { @Bean public RedisTemplate&lt;String, Object&gt; redisTemplate(RedisConnectionFactory factory) { //注入连接工厂 RedisTemplate&lt;String, Object&gt; template = new RedisTemplate&lt;&gt;(); template.setConnectionFactory(factory); //设置key的序列化方式 template.setKeySerializer(RedisSerializer.string()); //设置普通的value的序列化方式 template.setValueSerializer(RedisSerializer.json()); //设置hash的key的序列化方式 template.setHashKeySerializer(RedisSerializer.string()); //设置hash的value的序列化方式 template.setHashValueSerializer(RedisSerializer.json()); //配置完后需要触发？？ template.afterPropertiesSet(); return template; } } 测试redis 测试Value类型访问方式： @Test public void testStrings() { String redisKey = &quot;test:count&quot;; redisTemplate.opsForValue().set(redisKey, 1); System.out.println(redisTemplate.opsForValue().get(redisKey)); System.out.println(redisTemplate.opsForValue().increment(redisKey)); System.out.println(redisTemplate.opsForValue().decrement(redisKey)); } 测试Hash类型的访问方式： @Test public void testHashes() { String redisKey = &quot;test:hash&quot;; redisTemplate.opsForHash().put(redisKey, &quot;id&quot;, 1); redisTemplate.opsForHash().put(redisKey, &quot;username&quot;, &quot;zhangsan&quot;); System.out.println(redisTemplate.opsForHash().get(redisKey, &quot;id&quot;)); System.out.println(redisTemplate.opsForHash().get(redisKey, &quot;username&quot;)); } 测试List类型访问方法： @Test public void testLists() { String redisKey = &quot;test:list&quot;; redisTemplate.opsForList().leftPush(redisKey, 101); redisTemplate.opsForList().leftPush(redisKey, 102); redisTemplate.opsForList().leftPush(redisKey, 103); System.out.println(redisTemplate.opsForList().size(redisKey)); System.out.println(redisTemplate.opsForList().index(redisKey, 1)); System.out.println(redisTemplate.opsForList().range(redisKey, 0, 2)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); System.out.println(redisTemplate.opsForList().leftPop(redisKey)); } 测试Set类型访问方法： @Test public void testSets() { String redisKey = &quot;test:teachers&quot;; redisTemplate.opsForSet().add(redisKey, &quot;刘备&quot;, &quot;Andy&quot;, &quot;Selena&quot;, &quot;Shawn&quot;); System.out.println(redisTemplate.opsForSet().size(redisKey)); System.out.println(redisTemplate.opsForSet().pop(redisKey)); System.out.println(redisTemplate.opsForSet().members(redisKey)); } 测试排序set的访问方法 @Test public void testSortedSets() { String redisKey = &quot;test:students&quot;; redisTemplate.opsForZSet().add(redisKey, &quot;Linda&quot;, 92); redisTemplate.opsForZSet().add(redisKey, &quot;John&quot;, 86); redisTemplate.opsForZSet().add(redisKey, &quot;Thomas&quot;, 98); redisTemplate.opsForZSet().add(redisKey, &quot;Austin&quot;, 73); redisTemplate.opsForZSet().add(redisKey, &quot;Ben&quot;, 64); System.out.println(redisTemplate.opsForZSet().zCard(redisKey)); System.out.println(redisTemplate.opsForZSet().score(redisKey, &quot;John&quot;)); System.out.println(redisTemplate.opsForZSet().reverseRank(redisKey, &quot;John&quot;)); System.out.println(redisTemplate.opsForZSet().range(redisKey, 0, 2)); System.out.println(redisTemplate.opsForZSet().reverseRange(redisKey, 0, 2)); } 操作key的方法： @Test public void testKeys() { redisTemplate.delete(&quot;test:hash&quot;); System.out.println(redisTemplate.hasKey(&quot;test:hash&quot;)); redisTemplate.expire(&quot;test:students&quot;, 10, TimeUnit.SECONDS); } 当对某个key需要多次操作时，可以绑定 @Test public void testBoundOperations() { String redisKey = &quot;test:count&quot;; BoundValueOperations operations = redisTemplate.boundValueOps(redisKey); operations.increment(); operations.increment(); operations.increment(); operations.increment(); System.out.println(operations.get()); } Redis支持事务，redis将事务中所有操作入队，然后一次性执行，所以事务中一般不含有查询操作，并且使用编程式事务 @Test public void testTransactional() { Object obj = redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations redisOperations) throws DataAccessException { String redisKey = &quot;test:tx&quot;; //启用事务 redisOperations.multi(); redisOperations.opsForSet().add(redisKey, &quot;Hello&quot;); redisOperations.opsForSet().add(redisKey, &quot;World&quot;); //此查询无效，因为之前添加数据的操作都还没执行 System.out.println(redisOperations.opsForSet().members(redisKey)); //提交事务 return redisOperations.exec(); } }); System.out.println(obj); } 点赞 点赞为高频操作，可以使用redis存储数据，提高性能 对帖子点赞，对帖子的评论点赞 没赞点一下变成点赞，点赞了再点一下，变成没赞 需要统计点赞数量 数据访问层 不需要写，因为非常简单 服务层 写一个工具，专门生成redis的key public class RedisKeyUtil { private static final String SPLIT = &quot;:&quot;; private static final String PREFIX_ENTITY_LIKE = &quot;like:entity&quot;; //某个实体的赞 //like:entity:entityType:entityId -&gt; set(userId) public static String getEntityLikeKey(int entityType, int entityId) { return PREFIX_ENTITY_LIKE + SPLIT + entityType + SPLIT + entityId; } } 点赞/查询点赞数量/查询点赞状态 @Service public class LikeService { @Autowired private RedisTemplate redisTemplate; //点赞 public void like(int userId, int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); if (redisTemplate.opsForSet().isMember(entityLikeKey, userId)) { redisTemplate.opsForSet().remove(entityLikeKey, userId); } else { redisTemplate.opsForSet().add(entityLikeKey, userId); } } //查询实体点赞数量 public long findEntityLikeCount(int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); return redisTemplate.opsForSet().size(entityLikeKey); } //查询某人对某实体是否点过赞(int更具扩展性） public int findEntityLikeStatus(int userId, int entityType, int entityId) { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); return redisTemplate.opsForSet().isMember(entityLikeKey, userId) ? 1 : 0; } } 控制层 采用异步消息，进行点赞，返回点赞数量和点赞状态 @Controller public class LikeController { @Autowired private LikeService likeService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/like&quot;, method = RequestMethod.POST) @ResponseBody public String like(int entityType, int entityId) { User user = hostHolder.getUser(); likeService.like(user.getId(), entityType, entityId); long likeCount = likeService.findEntityLikeCount(entityType, entityId); int likeStatus = likeService.findEntityLikeStatus(user.getId(), entityType, entityId); Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); map.put(&quot;likeCount&quot;, likeCount); map.put(&quot;likeStatus&quot;, likeStatus); return CommunityUtil.getJSONString(0, null, map); } } 我收到的赞 个人主页上显示 重构点赞功能，点赞时，把点赞对象（用户）的赞加一。 开发个人主页 包括个人信息，以及收到的赞 修改RedisKeyUtil 每一个用户获得的赞，作为一个key存在redis中 private static final String PREFIC_USER_LIKE = &quot;like:user&quot;; //某个用户收获的赞 public static String getUserLikeKey(int userId) { return PREFIC_USER_LIKE + SPLIT + userId; } 修改likeService 需要保证事务性 public void like(int userId, int entityType, int entityId, int entityUserId) { // String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); // if (redisTemplate.opsForSet().isMember(entityLikeKey, userId)) { // redisTemplate.opsForSet().remove(entityLikeKey, userId); // } else { // redisTemplate.opsForSet().add(entityLikeKey, userId); // } //更新某用户的赞，需要保证事务性 redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId); String userLikeKey = RedisKeyUtil.getUserLikeKey(entityUserId); boolean isMember = operations.opsForSet().isMember(entityLikeKey, userId); //开启事务 operations.multi(); if (isMember) { operations.opsForSet().remove(entityLikeKey, userId); operations.opsForValue().decrement(userLikeKey); } else { operations.opsForSet().add(entityLikeKey, userId); operations.opsForValue().increment(userLikeKey); } return operations.exec(); } }); } 修改Controller，点赞对象id作为参数传入 代码略 修改用户个人主页代码，显示赞 代码略 关注/取消关注 实现关注/取关功能 统计关注数/粉丝数 A关注B，A是B的粉丝，B是A的关注者，A是B的follower，B是A的followee 关注的目标不能写死，可以关注用户或者帖子等抽象实体 分为两部：实现关注/去关，统计关注数量，粉丝数量 定义RedisKeyUtil //某个用户的关注实体 //followee:userId:entityType -&gt; zSet(entityId,time) public static String getFolloweeKey(int userId, int entityType) { return PREFIX_FOLLOWEE + SPLIT + userId + SPLIT + entityType; } //某个用户的粉丝 //follower:entityType:entityId -&gt; zSet(userId,time) public static String getFollowerKey(int entityType, int entityId) { return PREFIX_FOLLOWER + SPLIT + entityType + SPLIT + entityId; } 服务层 关注/粉丝，查询关注者数量，查询粉丝数量，查询当前用户对某用户的关注状态 @Service public class FollowService { @Autowired private RedisTemplate redisTemplate; public void follow(int userId, int entityType, int entityId) { redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); operations.multi(); operations.opsForZSet().add(followeeKey, entityId, System.currentTimeMillis()); operations.opsForZSet().add(followerKey, userId, System.currentTimeMillis()); return operations.exec(); } }); } public void unFollow(int userId, int entityType, int entityId) { redisTemplate.execute(new SessionCallback() { @Override public Object execute(RedisOperations operations) throws DataAccessException { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); operations.multi(); operations.opsForZSet().remove(followeeKey, entityId); operations.opsForZSet().remove(followerKey, userId); return operations.exec(); } }); } //查询关注实体的数量 public long findFolloweeCount(int userId, int entityType) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); return redisTemplate.opsForZSet().size(followeeKey); } //查询粉丝数量 public long fingFollowerCount(int entityType, int entityId) { String followerKey = RedisKeyUtil.getFollowerKey(entityType, entityId); return redisTemplate.opsForZSet().size(followerKey); } //显示关注状态 public boolean hasFollowed(int userId, int entityType, int entityId) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, entityType); Double status = redisTemplate.opsForZSet().score(followeeKey, entityId); return status != null; } } 控制层 在主页显示关注数量/粉丝数量/关注状态，并定义“关注”按钮 @Controller public class FollowController { @Autowired private FollowService followService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/follow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String follow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.follow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已关注&quot;); } @RequestMapping(path = &quot;/unfollow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String unfollow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.unFollow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已取消关注&quot;); } } @Controller public class FollowController { @Autowired private FollowService followService; @Autowired private HostHolder hostHolder; @RequestMapping(path = &quot;/follow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String follow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.follow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已关注&quot;); } @RequestMapping(path = &quot;/unfollow&quot;, method = RequestMethod.POST) @ResponseBody @LoginRequired public String unfollow(int entityType, int entityId) { User user = hostHolder.getUser(); followService.unFollow(user.getId(), entityType, entityId); return CommunityUtil.getJSONString(0, &quot;已取消关注&quot;); } } 关注列表/粉丝列表 已有有数据，展示即可。 业务层：查询某用户关注的人，以及粉丝，支持分页 表现层：处理请求，编写模板 服务层 获得某一用户的关注者/关注时间，粉丝/关注时间，放在map中，以list形式返回 //查询某个用户关注的人 public List&lt;Map&lt;String, Object&gt;&gt; findFollowees(int userId, int offset, int limit) { String followeeKey = RedisKeyUtil.getFolloweeKey(userId, ENTITY_TYPE_USER); Set&lt;Integer&gt; targetIds = redisTemplate.opsForZSet().reverseRange(followeeKey, offset, offset + limit - 1); if (targetIds != null &amp;&amp; !targetIds.isEmpty()) { List&lt;Map&lt;String, Object&gt;&gt; list = new ArrayList&lt;&gt;(); for (Integer targetId : targetIds) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); User user = userService.findUserById(targetId); map.put(&quot;user&quot;, user); Double score = redisTemplate.opsForZSet().score(followeeKey, targetId); map.put(&quot;followTime&quot;, new Date(score.longValue())); list.add(map); } return list; } return null; } //查询某用户的粉丝 public List&lt;Map&lt;String, Object&gt;&gt; findFollowers(int userId, int offset, int limit) { String followerKey = RedisKeyUtil.getFollowerKey(ENTITY_TYPE_USER, userId); //set虽然是无序的，但是redis做了内置处理，变得有序 Set&lt;Integer&gt; targetIds = redisTemplate.opsForZSet().reverseRange(followerKey, offset, offset + limit - 1); if (targetIds != null &amp;&amp; !targetIds.isEmpty()) { List&lt;Map&lt;String, Object&gt;&gt; list = new ArrayList&lt;&gt;(); for (Integer targetId : targetIds) { Map&lt;String, Object&gt; map = new HashMap&lt;&gt;(); User user = userService.findUserById(targetId); map.put(&quot;user&quot;, user); Double score = redisTemplate.opsForZSet().score(followerKey, targetId); map.put(&quot;followTime&quot;, new Date(score.longValue())); list.add(map); } return list; } return null; } 控制层 处理分页信息，以及判断当前用户是否关注了list中的用户,以及获得当前用户的信息 @RequestMapping(path = &quot;/followees/{userId}&quot;, method = RequestMethod.GET) public String getFollowees(@PathVariable(&quot;userId&quot;) int userId, Model model, Page page) { User user = userService.findUserById(userId); model.addAttribute(&quot;user&quot;, user); page.setLimit(5); page.setPath(&quot;/followees/&quot; + userId); page.setRows((int) followService.findFolloweeCount(userId, ENTITY_TYPE_USER)); List&lt;Map&lt;String, Object&gt;&gt; userList = followService.findFollowees(userId, page.getOffset(), page.getLimit()); if (userList != null &amp;&amp; !userList.isEmpty()) { for (Map&lt;String, Object&gt; map : userList) { User followee = (User) map.get(&quot;user&quot;); map.put(&quot;hasFollowed&quot;, hasFollowed(followee.getId())); } } model.addAttribute(&quot;users&quot;, userList); return &quot;site/followee&quot;; } private boolean hasFollowed(int userId) { if (hostHolder.getUser() == null) { return false; } return followService.hasFollowed(hostHolder.getUser().getId(), ENTITY_TYPE_USER, userId); } @RequestMapping(path = &quot;/followers/{userId}&quot;, method = RequestMethod.GET) public String getFollowers(@PathVariable(&quot;userId&quot;) int userId, Model model, Page page) { User user = userService.findUserById(userId); model.addAttribute(&quot;user&quot;, user); page.setLimit(5); page.setPath(&quot;/followers/&quot; + userId); page.setRows((int) followService.fingFollowerCount(ENTITY_TYPE_USER, userId)); List&lt;Map&lt;String, Object&gt;&gt; userList = followService.findFollowers(userId, page.getOffset(), page.getLimit()); if (userList != null &amp;&amp; !userList.isEmpty()) { for (Map&lt;String, Object&gt; map : userList) { User follower = (User) map.get(&quot;user&quot;); map.put(&quot;hasFollowed&quot;, hasFollowed(follower.getId())); } } model.addAttribute(&quot;users&quot;, userList); return &quot;site/follower&quot;; } 优化登录模块 使用redis存储验证码（因为频繁访问），而且不需要永久保存，存在session里有问题。 Redis处理登录凭证（ticket），（每次在拦截器里面查） 缓存用户信息，每次根据凭证查用户 Redis验证码 定义key //验证码 public static String getKaptchaKey(String owner) { return PREFIX_KAPTCHA + SPLIT + owner; } 生成验证码所有者，放在cookie中（类似于sessionID） //需要解决验证码的归属问题 String kaptchaOwner = CommunityUtil.generateUUID(); Cookie cookie = new Cookie(&quot;kaptchaOwner&quot;, kaptchaOwner); cookie.setMaxAge(60); cookie.setPath(contextPath); response.addCookie(cookie); //将验证码存入redis String redisKey = RedisKeyUtil.getKaptchaKey(kaptchaOwner); redisTemplate.opsForValue().set(redisKey, text, 60, TimeUnit.SECONDS); 检查验证码 //检查验证码 String kaptcha = null; if (StringUtils.isNotBlank(kaptchaOwner)) { String redisKey = RedisKeyUtil.getKaptchaKey(kaptchaOwner); kaptcha = (String) redisTemplate.opsForValue().get(redisKey); } Redis记录登录凭证 redis key //登录凭证 public static String getTicketKey(String ticket) { return PREFIX_TICKET + SPLIT + ticket; } Redis缓存用户信息 缓存时，如果取到，则取，不然，添加缓存，更新数据时，也要更新缓存（但是一般是直接删除，下次请求重查即可）（更新数据可能会有并发问题）。 优先缓存取值 取不到，初始化缓存 数据变化，清除缓存 在service层定义三个函数，分别初始化缓存，获得缓存，清除缓存 //从缓存中取数据 private User getCache(int userId) { String redisKey = RedisKeyUtil.getUserKey(userId); return (User) redisTemplate.opsForValue().get(redisKey); } //初始化缓存 private User initCache(int userId) { User user = userMapper.selectById(userId); String redisKey = RedisKeyUtil.getUserKey(userId); redisTemplate.opsForValue().set(redisKey, user, 3600, TimeUnit.SECONDS); return user; } //清除缓存 private void clearCache(int userId) { String redisKey = RedisKeyUtil.getUserKey(userId); redisTemplate.delete(redisKey); }","@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  <link type="application/atom+xml" rel="alternate" href="https://github.com/tietietietie/tietietietie.github.io/feed.xml" title="tie's blog" />
+
+  <link rel="shortcut icon" type="image/x-icon" href="/logo.png" />
+  <link rel="stylesheet" href="/assets/css/main.css" />
+</head><body a="auto">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        <a href="/">..</a>
+
+<article>
+  <p class="post-meta">
+    <time datetime="2020-06-09 06:52:00 +0800">2020-06-09</time>
+  </p>
+  
+  <h1>社区论坛：Redis优化</h1>
+
+  <h1 id="chapter-4">Chapter 4</h1>
+
+<h2 id="redies入门">Redies入门</h2>
+
+<p>NoSQL：不只是SQL</p>
+
+<p>Redis按照键值对存储，其中Key为String，Value支持多种数据结构</p>
+
+<p>Redis将所有数据存放在内存，同时将数据按照快照（完全存储，恢复快）（耗时，阻塞）（不适合实时）/日志（AOF）（存命令）（实时）（体积大）（恢复速度慢）的形式保存在内存上，保证安全</p>
+
+<p>使用简单，常用场景：缓存，排行榜（热门帖子缓存），计数器（频繁更新访问量），社交网络（点赞/关注），消息队列</p>
+
+<p><a href="https://redis.io/">官网</a>，学会<a href="https://redis.io/commands">操作数据的命令</a>就可以使用了。</p>
+
+<h2 id="spring整合redis">Spring整合Redis</h2>
+
+<p>步骤：</p>
+
+<ul>
+  <li>引入依赖spring-boot-starter-data-redis</li>
+  <li>配置Redis，配置数据库参数，编写配置类，构造RedisTemplate</li>
+  <li>访问Redis，使用redisTemplate.opsForValue()等函数</li>
+</ul>
+
+<h3 id="导入jar包">导入jar包</h3>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;dependency&gt;</span>
+    <span class="nt">&lt;groupId&gt;</span>org.springframework.boot<span class="nt">&lt;/groupId&gt;</span>
+    <span class="nt">&lt;artifactId&gt;</span>spring-boot-starter-data-redis<span class="nt">&lt;/artifactId&gt;</span>
+    <span class="nt">&lt;version&gt;</span>2.2.7.RELEASE<span class="nt">&lt;/version&gt;</span>
+<span class="nt">&lt;/dependency&gt;</span>
+</code></pre></div></div>
+
+<h3 id="配置redis">配置redis</h3>
+
+<p>配置文件：</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#redis
+spring.redis.database=11
+spring.redis.host=localhost
+spring.redis.port=6379
+</code></pre></div></div>
+
+<p>配置类：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Configuration</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">RedisConfig</span> <span class="o">{</span>
+    <span class="nd">@Bean</span>
+    <span class="kd">public</span> <span class="nc">RedisTemplate</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="nf">redisTemplate</span><span class="o">(</span><span class="nc">RedisConnectionFactory</span> <span class="n">factory</span><span class="o">)</span> <span class="o">{</span>
+        <span class="c1">//注入连接工厂</span>
+        <span class="nc">RedisTemplate</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">template</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">RedisTemplate</span><span class="o">&lt;&gt;();</span>
+        <span class="n">template</span><span class="o">.</span><span class="na">setConnectionFactory</span><span class="o">(</span><span class="n">factory</span><span class="o">);</span>
+        <span class="c1">//设置key的序列化方式</span>
+        <span class="n">template</span><span class="o">.</span><span class="na">setKeySerializer</span><span class="o">(</span><span class="nc">RedisSerializer</span><span class="o">.</span><span class="na">string</span><span class="o">());</span>
+        <span class="c1">//设置普通的value的序列化方式</span>
+        <span class="n">template</span><span class="o">.</span><span class="na">setValueSerializer</span><span class="o">(</span><span class="nc">RedisSerializer</span><span class="o">.</span><span class="na">json</span><span class="o">());</span>
+        <span class="c1">//设置hash的key的序列化方式</span>
+        <span class="n">template</span><span class="o">.</span><span class="na">setHashKeySerializer</span><span class="o">(</span><span class="nc">RedisSerializer</span><span class="o">.</span><span class="na">string</span><span class="o">());</span>
+        <span class="c1">//设置hash的value的序列化方式</span>
+        <span class="n">template</span><span class="o">.</span><span class="na">setHashValueSerializer</span><span class="o">(</span><span class="nc">RedisSerializer</span><span class="o">.</span><span class="na">json</span><span class="o">());</span>
+        <span class="c1">//配置完后需要触发？？</span>
+        <span class="n">template</span><span class="o">.</span><span class="na">afterPropertiesSet</span><span class="o">();</span>
+        <span class="k">return</span> <span class="n">template</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="测试redis">测试redis</h3>
+
+<p>测试Value类型访问方式：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Test</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">testStrings</span><span class="o">()</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="s">"test:count"</span><span class="o">;</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">set</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="mi">1</span><span class="o">);</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">get</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">increment</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">decrement</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>测试Hash类型的访问方式：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Test</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">testHashes</span><span class="o">()</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="s">"test:hash"</span><span class="o">;</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForHash</span><span class="o">().</span><span class="na">put</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"id"</span><span class="o">,</span> <span class="mi">1</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForHash</span><span class="o">().</span><span class="na">put</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"username"</span><span class="o">,</span> <span class="s">"zhangsan"</span><span class="o">);</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForHash</span><span class="o">().</span><span class="na">get</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"id"</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForHash</span><span class="o">().</span><span class="na">get</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"username"</span><span class="o">));</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>测试List类型访问方法：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Test</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">testLists</span><span class="o">()</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="s">"test:list"</span><span class="o">;</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">leftPush</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="mi">101</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">leftPush</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="mi">102</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">leftPush</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="mi">103</span><span class="o">);</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">size</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">index</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="mi">1</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">range</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="mi">0</span><span class="o">,</span> <span class="mi">2</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">leftPop</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">leftPop</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForList</span><span class="o">().</span><span class="na">leftPop</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>测试Set类型访问方法：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Test</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">testSets</span><span class="o">()</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="s">"test:teachers"</span><span class="o">;</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"刘备"</span><span class="o">,</span> <span class="s">"Andy"</span><span class="o">,</span> <span class="s">"Selena"</span><span class="o">,</span> <span class="s">"Shawn"</span><span class="o">);</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">size</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">pop</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">members</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>测试排序set的访问方法</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Test</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">testSortedSets</span><span class="o">()</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="s">"test:students"</span><span class="o">;</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"Linda"</span><span class="o">,</span> <span class="mi">92</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"John"</span><span class="o">,</span> <span class="mi">86</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"Thomas"</span><span class="o">,</span> <span class="mi">98</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"Austin"</span><span class="o">,</span> <span class="mi">73</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"Ben"</span><span class="o">,</span> <span class="mi">64</span><span class="o">);</span>
+
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">zCard</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">score</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"John"</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">reverseRank</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"John"</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">range</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="mi">0</span><span class="o">,</span> <span class="mi">2</span><span class="o">));</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">reverseRange</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="mi">0</span><span class="o">,</span> <span class="mi">2</span><span class="o">));</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>操作key的方法：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Test</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">testKeys</span><span class="o">()</span> <span class="o">{</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">delete</span><span class="o">(</span><span class="s">"test:hash"</span><span class="o">);</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">hasKey</span><span class="o">(</span><span class="s">"test:hash"</span><span class="o">));</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">expire</span><span class="o">(</span><span class="s">"test:students"</span><span class="o">,</span> <span class="mi">10</span><span class="o">,</span> <span class="nc">TimeUnit</span><span class="o">.</span><span class="na">SECONDS</span><span class="o">);</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>当对某个key需要多次操作时，可以绑定</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Test</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">testBoundOperations</span><span class="o">()</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="s">"test:count"</span><span class="o">;</span>
+    <span class="nc">BoundValueOperations</span> <span class="n">operations</span> <span class="o">=</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">boundValueOps</span><span class="o">(</span><span class="n">redisKey</span><span class="o">);</span>
+    <span class="n">operations</span><span class="o">.</span><span class="na">increment</span><span class="o">();</span>
+    <span class="n">operations</span><span class="o">.</span><span class="na">increment</span><span class="o">();</span>
+    <span class="n">operations</span><span class="o">.</span><span class="na">increment</span><span class="o">();</span>
+    <span class="n">operations</span><span class="o">.</span><span class="na">increment</span><span class="o">();</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">operations</span><span class="o">.</span><span class="na">get</span><span class="o">());</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>Redis支持事务，redis将事务中所有操作入队，然后一次性执行，所以事务中一般不含有查询操作，并且使用编程式事务</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Test</span>
+<span class="kd">public</span> <span class="kt">void</span> <span class="nf">testTransactional</span><span class="o">()</span> <span class="o">{</span>
+    <span class="nc">Object</span> <span class="n">obj</span> <span class="o">=</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">execute</span><span class="o">(</span><span class="k">new</span> <span class="nc">SessionCallback</span><span class="o">()</span> <span class="o">{</span>
+        <span class="nd">@Override</span>
+        <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">execute</span><span class="o">(</span><span class="nc">RedisOperations</span> <span class="n">redisOperations</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">DataAccessException</span> <span class="o">{</span>
+            <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="s">"test:tx"</span><span class="o">;</span>
+            <span class="c1">//启用事务</span>
+            <span class="n">redisOperations</span><span class="o">.</span><span class="na">multi</span><span class="o">();</span>
+            <span class="n">redisOperations</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"Hello"</span><span class="o">);</span>
+            <span class="n">redisOperations</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="s">"World"</span><span class="o">);</span>
+            <span class="c1">//此查询无效，因为之前添加数据的操作都还没执行</span>
+            <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">redisOperations</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">members</span><span class="o">(</span><span class="n">redisKey</span><span class="o">));</span>
+            <span class="c1">//提交事务</span>
+            <span class="k">return</span> <span class="n">redisOperations</span><span class="o">.</span><span class="na">exec</span><span class="o">();</span>
+        <span class="o">}</span>
+    <span class="o">});</span>
+    <span class="nc">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="n">obj</span><span class="o">);</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h2 id="点赞">点赞</h2>
+
+<p>点赞为高频操作，可以使用redis存储数据，提高性能</p>
+
+<ul>
+  <li>对帖子点赞，对帖子的评论点赞</li>
+  <li>没赞点一下变成点赞，点赞了再点一下，变成没赞</li>
+  <li>需要统计点赞数量</li>
+</ul>
+
+<h3 id="数据访问层">数据访问层</h3>
+
+<p>不需要写，因为非常简单</p>
+
+<h3 id="服务层">服务层</h3>
+
+<p>写一个工具，专门生成redis的key</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kd">class</span> <span class="nc">RedisKeyUtil</span> <span class="o">{</span>
+    <span class="kd">private</span> <span class="kd">static</span> <span class="kd">final</span> <span class="nc">String</span> <span class="no">SPLIT</span> <span class="o">=</span> <span class="s">":"</span><span class="o">;</span>
+    <span class="kd">private</span> <span class="kd">static</span> <span class="kd">final</span> <span class="nc">String</span> <span class="no">PREFIX_ENTITY_LIKE</span> <span class="o">=</span> <span class="s">"like:entity"</span><span class="o">;</span>
+
+    <span class="c1">//某个实体的赞</span>
+    <span class="c1">//like:entity:entityType:entityId -&gt; set(userId)</span>
+    <span class="kd">public</span> <span class="kd">static</span> <span class="nc">String</span> <span class="nf">getEntityLikeKey</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">return</span> <span class="no">PREFIX_ENTITY_LIKE</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">entityType</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">entityId</span><span class="o">;</span>
+    <span class="o">}</span>
+
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>点赞/查询点赞数量/查询点赞状态</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Service</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">LikeService</span> <span class="o">{</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">RedisTemplate</span> <span class="n">redisTemplate</span><span class="o">;</span>
+
+    <span class="c1">//点赞</span>
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">like</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">entityLikeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getEntityLikeKey</span><span class="o">(</span><span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">isMember</span><span class="o">(</span><span class="n">entityLikeKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">))</span> <span class="o">{</span>
+            <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">remove</span><span class="o">(</span><span class="n">entityLikeKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">);</span>
+        <span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+            <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">entityLikeKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">);</span>
+        <span class="o">}</span>
+    <span class="o">}</span>
+
+    <span class="c1">//查询实体点赞数量</span>
+    <span class="kd">public</span> <span class="kt">long</span> <span class="nf">findEntityLikeCount</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">entityLikeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getEntityLikeKey</span><span class="o">(</span><span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">size</span><span class="o">(</span><span class="n">entityLikeKey</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="c1">//查询某人对某实体是否点过赞(int更具扩展性）</span>
+    <span class="kd">public</span> <span class="kt">int</span> <span class="nf">findEntityLikeStatus</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">entityLikeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getEntityLikeKey</span><span class="o">(</span><span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">isMember</span><span class="o">(</span><span class="n">entityLikeKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">)</span> <span class="o">?</span> <span class="mi">1</span> <span class="o">:</span> <span class="mi">0</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="控制层">控制层</h3>
+
+<p>采用异步消息，进行点赞，返回点赞数量和点赞状态</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Controller</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">LikeController</span> <span class="o">{</span>
+
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">LikeService</span> <span class="n">likeService</span><span class="o">;</span>
+
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">HostHolder</span> <span class="n">hostHolder</span><span class="o">;</span>
+
+    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/like"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">POST</span><span class="o">)</span>
+    <span class="nd">@ResponseBody</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">like</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">();</span>
+        <span class="n">likeService</span><span class="o">.</span><span class="na">like</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="kt">long</span> <span class="n">likeCount</span> <span class="o">=</span> <span class="n">likeService</span><span class="o">.</span><span class="na">findEntityLikeCount</span><span class="o">(</span><span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="kt">int</span> <span class="n">likeStatus</span> <span class="o">=</span> <span class="n">likeService</span><span class="o">.</span><span class="na">findEntityLikeStatus</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+
+        <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">map</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+        <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"likeCount"</span><span class="o">,</span> <span class="n">likeCount</span><span class="o">);</span>
+        <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"likeStatus"</span><span class="o">,</span> <span class="n">likeStatus</span><span class="o">);</span>
+        <span class="k">return</span> <span class="nc">CommunityUtil</span><span class="o">.</span><span class="na">getJSONString</span><span class="o">(</span><span class="mi">0</span><span class="o">,</span> <span class="kc">null</span><span class="o">,</span> <span class="n">map</span><span class="o">);</span>
+    <span class="o">}</span>
+
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h2 id="我收到的赞">我收到的赞</h2>
+
+<ul>
+  <li>个人主页上显示</li>
+</ul>
+
+<p>重构点赞功能，点赞时，把点赞对象（用户）的赞加一。</p>
+
+<ul>
+  <li>开发个人主页</li>
+</ul>
+
+<p>包括个人信息，以及收到的赞</p>
+
+<h3 id="修改rediskeyutil">修改RedisKeyUtil</h3>
+
+<p>每一个用户获得的赞，作为一个key存在redis中</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">private</span> <span class="kd">static</span> <span class="kd">final</span> <span class="nc">String</span> <span class="no">PREFIC_USER_LIKE</span> <span class="o">=</span> <span class="s">"like:user"</span><span class="o">;</span>
+<span class="c1">//某个用户收获的赞</span>
+<span class="kd">public</span> <span class="kd">static</span> <span class="nc">String</span> <span class="nf">getUserLikeKey</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="no">PREFIC_USER_LIKE</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">userId</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="修改likeservice">修改likeService</h3>
+
+<p>需要保证事务性</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="kt">void</span> <span class="nf">like</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityUserId</span><span class="o">)</span> <span class="o">{</span>
+    <span class="c1">//        String entityLikeKey = RedisKeyUtil.getEntityLikeKey(entityType, entityId);</span>
+    <span class="c1">//        if (redisTemplate.opsForSet().isMember(entityLikeKey, userId)) {</span>
+    <span class="c1">//            redisTemplate.opsForSet().remove(entityLikeKey, userId);</span>
+    <span class="c1">//        } else {</span>
+    <span class="c1">//            redisTemplate.opsForSet().add(entityLikeKey, userId);</span>
+    <span class="c1">//        }</span>
+    <span class="c1">//更新某用户的赞，需要保证事务性</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">execute</span><span class="o">(</span><span class="k">new</span> <span class="nc">SessionCallback</span><span class="o">()</span> <span class="o">{</span>
+        <span class="nd">@Override</span>
+        <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">execute</span><span class="o">(</span><span class="nc">RedisOperations</span> <span class="n">operations</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">DataAccessException</span> <span class="o">{</span>
+            <span class="nc">String</span> <span class="n">entityLikeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getEntityLikeKey</span><span class="o">(</span><span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+            <span class="nc">String</span> <span class="n">userLikeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getUserLikeKey</span><span class="o">(</span><span class="n">entityUserId</span><span class="o">);</span>
+            <span class="kt">boolean</span> <span class="n">isMember</span> <span class="o">=</span> <span class="n">operations</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">isMember</span><span class="o">(</span><span class="n">entityLikeKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">);</span>
+            <span class="c1">//开启事务</span>
+            <span class="n">operations</span><span class="o">.</span><span class="na">multi</span><span class="o">();</span>
+            <span class="k">if</span> <span class="o">(</span><span class="n">isMember</span><span class="o">)</span> <span class="o">{</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">remove</span><span class="o">(</span><span class="n">entityLikeKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">);</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">decrement</span><span class="o">(</span><span class="n">userLikeKey</span><span class="o">);</span>
+            <span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">opsForSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">entityLikeKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">);</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">increment</span><span class="o">(</span><span class="n">userLikeKey</span><span class="o">);</span>
+            <span class="o">}</span>
+            <span class="k">return</span> <span class="n">operations</span><span class="o">.</span><span class="na">exec</span><span class="o">();</span>
+        <span class="o">}</span>
+    <span class="o">});</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="修改controller点赞对象id作为参数传入">修改Controller，点赞对象id作为参数传入</h3>
+
+<p>代码略</p>
+
+<h3 id="修改用户个人主页代码显示赞">修改用户个人主页代码，显示赞</h3>
+
+<p>代码略</p>
+
+<h2 id="关注取消关注">关注/取消关注</h2>
+
+<ul>
+  <li>实现关注/取关功能</li>
+  <li>统计关注数/粉丝数</li>
+</ul>
+
+<p>A关注B，A是B的粉丝，B是A的关注者，A是B的follower，B是A的followee</p>
+
+<p>关注的目标不能写死，可以关注用户或者帖子等抽象实体</p>
+
+<p>分为两部：实现关注/去关，统计关注数量，粉丝数量</p>
+
+<h3 id="定义rediskeyutil">定义RedisKeyUtil</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//某个用户的关注实体</span>
+<span class="c1">//followee:userId:entityType -&gt; zSet(entityId,time)</span>
+<span class="kd">public</span> <span class="kd">static</span> <span class="nc">String</span> <span class="nf">getFolloweeKey</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="no">PREFIX_FOLLOWEE</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">userId</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">entityType</span><span class="o">;</span>
+<span class="o">}</span>
+
+<span class="c1">//某个用户的粉丝</span>
+<span class="c1">//follower:entityType:entityId -&gt; zSet(userId,time)</span>
+<span class="kd">public</span> <span class="kd">static</span> <span class="nc">String</span> <span class="nf">getFollowerKey</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="no">PREFIX_FOLLOWER</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">entityType</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">entityId</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="服务层-1">服务层</h3>
+
+<p>关注/粉丝，查询关注者数量，查询粉丝数量，查询当前用户对某用户的关注状态</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Service</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">FollowService</span> <span class="o">{</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">RedisTemplate</span> <span class="n">redisTemplate</span><span class="o">;</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">follow</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="n">redisTemplate</span><span class="o">.</span><span class="na">execute</span><span class="o">(</span><span class="k">new</span> <span class="nc">SessionCallback</span><span class="o">()</span> <span class="o">{</span>
+            <span class="nd">@Override</span>
+            <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">execute</span><span class="o">(</span><span class="nc">RedisOperations</span> <span class="n">operations</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">DataAccessException</span> <span class="o">{</span>
+                <span class="nc">String</span> <span class="n">followeeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFolloweeKey</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">entityType</span><span class="o">);</span>
+                <span class="nc">String</span> <span class="n">followerKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFollowerKey</span><span class="o">(</span><span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">multi</span><span class="o">();</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">followeeKey</span><span class="o">,</span> <span class="n">entityId</span><span class="o">,</span> <span class="nc">System</span><span class="o">.</span><span class="na">currentTimeMillis</span><span class="o">());</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">add</span><span class="o">(</span><span class="n">followerKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">,</span> <span class="nc">System</span><span class="o">.</span><span class="na">currentTimeMillis</span><span class="o">());</span>
+                <span class="k">return</span> <span class="n">operations</span><span class="o">.</span><span class="na">exec</span><span class="o">();</span>
+            <span class="o">}</span>
+        <span class="o">});</span>
+    <span class="o">}</span>
+
+    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">unFollow</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="n">redisTemplate</span><span class="o">.</span><span class="na">execute</span><span class="o">(</span><span class="k">new</span> <span class="nc">SessionCallback</span><span class="o">()</span> <span class="o">{</span>
+            <span class="nd">@Override</span>
+            <span class="kd">public</span> <span class="nc">Object</span> <span class="nf">execute</span><span class="o">(</span><span class="nc">RedisOperations</span> <span class="n">operations</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">DataAccessException</span> <span class="o">{</span>
+                <span class="nc">String</span> <span class="n">followeeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFolloweeKey</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">entityType</span><span class="o">);</span>
+                <span class="nc">String</span> <span class="n">followerKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFollowerKey</span><span class="o">(</span><span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">multi</span><span class="o">();</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">remove</span><span class="o">(</span><span class="n">followeeKey</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+                <span class="n">operations</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">remove</span><span class="o">(</span><span class="n">followerKey</span><span class="o">,</span> <span class="n">userId</span><span class="o">);</span>
+                <span class="k">return</span> <span class="n">operations</span><span class="o">.</span><span class="na">exec</span><span class="o">();</span>
+            <span class="o">}</span>
+        <span class="o">});</span>
+    <span class="o">}</span>
+
+    <span class="c1">//查询关注实体的数量</span>
+    <span class="kd">public</span> <span class="kt">long</span> <span class="nf">findFolloweeCount</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">followeeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFolloweeKey</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">entityType</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">size</span><span class="o">(</span><span class="n">followeeKey</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="c1">//查询粉丝数量</span>
+    <span class="kd">public</span> <span class="kt">long</span> <span class="nf">fingFollowerCount</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">followerKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFollowerKey</span><span class="o">(</span><span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">size</span><span class="o">(</span><span class="n">followerKey</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="c1">//显示关注状态</span>
+    <span class="kd">public</span> <span class="kt">boolean</span> <span class="nf">hasFollowed</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">followeeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFolloweeKey</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">entityType</span><span class="o">);</span>
+        <span class="nc">Double</span> <span class="n">status</span> <span class="o">=</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">score</span><span class="o">(</span><span class="n">followeeKey</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">status</span> <span class="o">!=</span> <span class="kc">null</span><span class="o">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="控制层-1">控制层</h3>
+
+<p>在主页显示关注数量/粉丝数量/关注状态，并定义“关注”按钮</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Controller</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">FollowController</span> <span class="o">{</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">FollowService</span> <span class="n">followService</span><span class="o">;</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">HostHolder</span> <span class="n">hostHolder</span><span class="o">;</span>
+
+    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/follow"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">POST</span><span class="o">)</span>
+    <span class="nd">@ResponseBody</span>
+    <span class="nd">@LoginRequired</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">follow</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">();</span>
+        <span class="n">followService</span><span class="o">.</span><span class="na">follow</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">return</span> <span class="nc">CommunityUtil</span><span class="o">.</span><span class="na">getJSONString</span><span class="o">(</span><span class="mi">0</span><span class="o">,</span> <span class="s">"已关注"</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/unfollow"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">POST</span><span class="o">)</span>
+    <span class="nd">@ResponseBody</span>
+    <span class="nd">@LoginRequired</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">unfollow</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">();</span>
+        <span class="n">followService</span><span class="o">.</span><span class="na">unFollow</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">return</span> <span class="nc">CommunityUtil</span><span class="o">.</span><span class="na">getJSONString</span><span class="o">(</span><span class="mi">0</span><span class="o">,</span> <span class="s">"已取消关注"</span><span class="o">);</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nd">@Controller</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">FollowController</span> <span class="o">{</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">FollowService</span> <span class="n">followService</span><span class="o">;</span>
+    <span class="nd">@Autowired</span>
+    <span class="kd">private</span> <span class="nc">HostHolder</span> <span class="n">hostHolder</span><span class="o">;</span>
+
+    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/follow"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">POST</span><span class="o">)</span>
+    <span class="nd">@ResponseBody</span>
+    <span class="nd">@LoginRequired</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">follow</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">();</span>
+        <span class="n">followService</span><span class="o">.</span><span class="na">follow</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">return</span> <span class="nc">CommunityUtil</span><span class="o">.</span><span class="na">getJSONString</span><span class="o">(</span><span class="mi">0</span><span class="o">,</span> <span class="s">"已关注"</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/unfollow"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">POST</span><span class="o">)</span>
+    <span class="nd">@ResponseBody</span>
+    <span class="nd">@LoginRequired</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">unfollow</span><span class="o">(</span><span class="kt">int</span> <span class="n">entityType</span><span class="o">,</span> <span class="kt">int</span> <span class="n">entityId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">();</span>
+        <span class="n">followService</span><span class="o">.</span><span class="na">unFollow</span><span class="o">(</span><span class="n">user</span><span class="o">.</span><span class="na">getId</span><span class="o">(),</span> <span class="n">entityType</span><span class="o">,</span> <span class="n">entityId</span><span class="o">);</span>
+        <span class="k">return</span> <span class="nc">CommunityUtil</span><span class="o">.</span><span class="na">getJSONString</span><span class="o">(</span><span class="mi">0</span><span class="o">,</span> <span class="s">"已取消关注"</span><span class="o">);</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h2 id="关注列表粉丝列表">关注列表/粉丝列表</h2>
+
+<p>已有有数据，展示即可。</p>
+
+<p>业务层：查询某用户关注的人，以及粉丝，支持分页</p>
+
+<p>表现层：处理请求，编写模板</p>
+
+<h3 id="服务层-2">服务层</h3>
+
+<p>获得某一用户的关注者/关注时间，粉丝/关注时间，放在map中，以list形式返回</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="c1">//查询某个用户关注的人</span>
+    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;&gt;</span> <span class="nf">findFollowees</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">offset</span><span class="o">,</span> <span class="kt">int</span> <span class="n">limit</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">followeeKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFolloweeKey</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="no">ENTITY_TYPE_USER</span><span class="o">);</span>
+        <span class="nc">Set</span><span class="o">&lt;</span><span class="nc">Integer</span><span class="o">&gt;</span> <span class="n">targetIds</span> <span class="o">=</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">reverseRange</span><span class="o">(</span><span class="n">followeeKey</span><span class="o">,</span> <span class="n">offset</span><span class="o">,</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">limit</span> <span class="o">-</span> <span class="mi">1</span><span class="o">);</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">targetIds</span> <span class="o">!=</span> <span class="kc">null</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">targetIds</span><span class="o">.</span><span class="na">isEmpty</span><span class="o">())</span> <span class="o">{</span>
+            <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;&gt;</span> <span class="n">list</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ArrayList</span><span class="o">&lt;&gt;();</span>
+            <span class="k">for</span> <span class="o">(</span><span class="nc">Integer</span> <span class="n">targetId</span> <span class="o">:</span> <span class="n">targetIds</span><span class="o">)</span> <span class="o">{</span>
+                <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">map</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+                <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">(</span><span class="n">targetId</span><span class="o">);</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"user"</span><span class="o">,</span> <span class="n">user</span><span class="o">);</span>
+                <span class="nc">Double</span> <span class="n">score</span> <span class="o">=</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">score</span><span class="o">(</span><span class="n">followeeKey</span><span class="o">,</span> <span class="n">targetId</span><span class="o">);</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"followTime"</span><span class="o">,</span> <span class="k">new</span> <span class="nc">Date</span><span class="o">(</span><span class="n">score</span><span class="o">.</span><span class="na">longValue</span><span class="o">()));</span>
+                <span class="n">list</span><span class="o">.</span><span class="na">add</span><span class="o">(</span><span class="n">map</span><span class="o">);</span>
+            <span class="o">}</span>
+            <span class="k">return</span> <span class="n">list</span><span class="o">;</span>
+        <span class="o">}</span>
+        <span class="k">return</span> <span class="kc">null</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="c1">//查询某用户的粉丝</span>
+    <span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;&gt;</span> <span class="nf">findFollowers</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">offset</span><span class="o">,</span> <span class="kt">int</span> <span class="n">limit</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">String</span> <span class="n">followerKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getFollowerKey</span><span class="o">(</span><span class="no">ENTITY_TYPE_USER</span><span class="o">,</span> <span class="n">userId</span><span class="o">);</span>
+        <span class="c1">//set虽然是无序的，但是redis做了内置处理，变得有序</span>
+        <span class="nc">Set</span><span class="o">&lt;</span><span class="nc">Integer</span><span class="o">&gt;</span> <span class="n">targetIds</span> <span class="o">=</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">reverseRange</span><span class="o">(</span><span class="n">followerKey</span><span class="o">,</span> <span class="n">offset</span><span class="o">,</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">limit</span> <span class="o">-</span> <span class="mi">1</span><span class="o">);</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">targetIds</span> <span class="o">!=</span> <span class="kc">null</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">targetIds</span><span class="o">.</span><span class="na">isEmpty</span><span class="o">())</span> <span class="o">{</span>
+            <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;&gt;</span> <span class="n">list</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ArrayList</span><span class="o">&lt;&gt;();</span>
+            <span class="k">for</span> <span class="o">(</span><span class="nc">Integer</span> <span class="n">targetId</span> <span class="o">:</span> <span class="n">targetIds</span><span class="o">)</span> <span class="o">{</span>
+                <span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">map</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HashMap</span><span class="o">&lt;&gt;();</span>
+                <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">(</span><span class="n">targetId</span><span class="o">);</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"user"</span><span class="o">,</span> <span class="n">user</span><span class="o">);</span>
+                <span class="nc">Double</span> <span class="n">score</span> <span class="o">=</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForZSet</span><span class="o">().</span><span class="na">score</span><span class="o">(</span><span class="n">followerKey</span><span class="o">,</span> <span class="n">targetId</span><span class="o">);</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"followTime"</span><span class="o">,</span> <span class="k">new</span> <span class="nc">Date</span><span class="o">(</span><span class="n">score</span><span class="o">.</span><span class="na">longValue</span><span class="o">()));</span>
+                <span class="n">list</span><span class="o">.</span><span class="na">add</span><span class="o">(</span><span class="n">map</span><span class="o">);</span>
+            <span class="o">}</span>
+            <span class="k">return</span> <span class="n">list</span><span class="o">;</span>
+        <span class="o">}</span>
+        <span class="k">return</span> <span class="kc">null</span><span class="o">;</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="控制层-2">控制层</h3>
+
+<p>处理分页信息，以及判断当前用户是否关注了list中的用户,以及获得当前用户的信息</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/followees/{userId}"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">GET</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">getFollowees</span><span class="o">(</span><span class="nd">@PathVariable</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nc">Model</span> <span class="n">model</span><span class="o">,</span> <span class="nc">Page</span> <span class="n">page</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">(</span><span class="n">userId</span><span class="o">);</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"user"</span><span class="o">,</span> <span class="n">user</span><span class="o">);</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setLimit</span><span class="o">(</span><span class="mi">5</span><span class="o">);</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setPath</span><span class="o">(</span><span class="s">"/followees/"</span> <span class="o">+</span> <span class="n">userId</span><span class="o">);</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setRows</span><span class="o">((</span><span class="kt">int</span><span class="o">)</span> <span class="n">followService</span><span class="o">.</span><span class="na">findFolloweeCount</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="no">ENTITY_TYPE_USER</span><span class="o">));</span>
+        <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;&gt;</span> <span class="n">userList</span> <span class="o">=</span> <span class="n">followService</span><span class="o">.</span><span class="na">findFollowees</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">page</span><span class="o">.</span><span class="na">getOffset</span><span class="o">(),</span> <span class="n">page</span><span class="o">.</span><span class="na">getLimit</span><span class="o">());</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">userList</span> <span class="o">!=</span> <span class="kc">null</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">userList</span><span class="o">.</span><span class="na">isEmpty</span><span class="o">())</span> <span class="o">{</span>
+            <span class="k">for</span> <span class="o">(</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">map</span> <span class="o">:</span> <span class="n">userList</span><span class="o">)</span> <span class="o">{</span>
+                <span class="nc">User</span> <span class="n">followee</span> <span class="o">=</span> <span class="o">(</span><span class="nc">User</span><span class="o">)</span> <span class="n">map</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"user"</span><span class="o">);</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"hasFollowed"</span><span class="o">,</span> <span class="n">hasFollowed</span><span class="o">(</span><span class="n">followee</span><span class="o">.</span><span class="na">getId</span><span class="o">()));</span>
+            <span class="o">}</span>
+        <span class="o">}</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"users"</span><span class="o">,</span> <span class="n">userList</span><span class="o">);</span>
+        <span class="k">return</span> <span class="s">"site/followee"</span><span class="o">;</span>
+    <span class="o">}</span>
+
+    <span class="kd">private</span> <span class="kt">boolean</span> <span class="nf">hasFollowed</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">)</span> <span class="o">{</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">()</span> <span class="o">==</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+            <span class="k">return</span> <span class="kc">false</span><span class="o">;</span>
+        <span class="o">}</span>
+        <span class="k">return</span> <span class="n">followService</span><span class="o">.</span><span class="na">hasFollowed</span><span class="o">(</span><span class="n">hostHolder</span><span class="o">.</span><span class="na">getUser</span><span class="o">().</span><span class="na">getId</span><span class="o">(),</span> <span class="no">ENTITY_TYPE_USER</span><span class="o">,</span> <span class="n">userId</span><span class="o">);</span>
+    <span class="o">}</span>
+
+    <span class="nd">@RequestMapping</span><span class="o">(</span><span class="n">path</span> <span class="o">=</span> <span class="s">"/followers/{userId}"</span><span class="o">,</span> <span class="n">method</span> <span class="o">=</span> <span class="nc">RequestMethod</span><span class="o">.</span><span class="na">GET</span><span class="o">)</span>
+    <span class="kd">public</span> <span class="nc">String</span> <span class="nf">getFollowers</span><span class="o">(</span><span class="nd">@PathVariable</span><span class="o">(</span><span class="s">"userId"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">userId</span><span class="o">,</span> <span class="nc">Model</span> <span class="n">model</span><span class="o">,</span> <span class="nc">Page</span> <span class="n">page</span><span class="o">)</span> <span class="o">{</span>
+        <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">(</span><span class="n">userId</span><span class="o">);</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"user"</span><span class="o">,</span> <span class="n">user</span><span class="o">);</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setLimit</span><span class="o">(</span><span class="mi">5</span><span class="o">);</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setPath</span><span class="o">(</span><span class="s">"/followers/"</span> <span class="o">+</span> <span class="n">userId</span><span class="o">);</span>
+        <span class="n">page</span><span class="o">.</span><span class="na">setRows</span><span class="o">((</span><span class="kt">int</span><span class="o">)</span> <span class="n">followService</span><span class="o">.</span><span class="na">fingFollowerCount</span><span class="o">(</span><span class="no">ENTITY_TYPE_USER</span><span class="o">,</span> <span class="n">userId</span><span class="o">));</span>
+        <span class="nc">List</span><span class="o">&lt;</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;&gt;</span> <span class="n">userList</span> <span class="o">=</span> <span class="n">followService</span><span class="o">.</span><span class="na">findFollowers</span><span class="o">(</span><span class="n">userId</span><span class="o">,</span> <span class="n">page</span><span class="o">.</span><span class="na">getOffset</span><span class="o">(),</span> <span class="n">page</span><span class="o">.</span><span class="na">getLimit</span><span class="o">());</span>
+        <span class="k">if</span> <span class="o">(</span><span class="n">userList</span> <span class="o">!=</span> <span class="kc">null</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">userList</span><span class="o">.</span><span class="na">isEmpty</span><span class="o">())</span> <span class="o">{</span>
+            <span class="k">for</span> <span class="o">(</span><span class="nc">Map</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">,</span> <span class="nc">Object</span><span class="o">&gt;</span> <span class="n">map</span> <span class="o">:</span> <span class="n">userList</span><span class="o">)</span> <span class="o">{</span>
+                <span class="nc">User</span> <span class="n">follower</span> <span class="o">=</span> <span class="o">(</span><span class="nc">User</span><span class="o">)</span> <span class="n">map</span><span class="o">.</span><span class="na">get</span><span class="o">(</span><span class="s">"user"</span><span class="o">);</span>
+                <span class="n">map</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"hasFollowed"</span><span class="o">,</span> <span class="n">hasFollowed</span><span class="o">(</span><span class="n">follower</span><span class="o">.</span><span class="na">getId</span><span class="o">()));</span>
+            <span class="o">}</span>
+        <span class="o">}</span>
+        <span class="n">model</span><span class="o">.</span><span class="na">addAttribute</span><span class="o">(</span><span class="s">"users"</span><span class="o">,</span> <span class="n">userList</span><span class="o">);</span>
+        <span class="k">return</span> <span class="s">"site/follower"</span><span class="o">;</span>
+    <span class="o">}</span>
+</code></pre></div></div>
+
+<h2 id="优化登录模块">优化登录模块</h2>
+
+<ul>
+  <li>使用redis存储验证码（因为频繁访问），而且不需要永久保存，存在session里有问题。</li>
+  <li>Redis处理登录凭证（ticket），（每次在拦截器里面查）</li>
+  <li>缓存用户信息，每次根据凭证查用户</li>
+</ul>
+
+<h3 id="redis验证码">Redis验证码</h3>
+
+<p>定义key</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//验证码</span>
+<span class="kd">public</span> <span class="kd">static</span> <span class="nc">String</span> <span class="nf">getKaptchaKey</span><span class="o">(</span><span class="nc">String</span> <span class="n">owner</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="no">PREFIX_KAPTCHA</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">owner</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>生成验证码所有者，放在cookie中（类似于sessionID）</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//需要解决验证码的归属问题</span>
+<span class="nc">String</span> <span class="n">kaptchaOwner</span> <span class="o">=</span> <span class="nc">CommunityUtil</span><span class="o">.</span><span class="na">generateUUID</span><span class="o">();</span>
+<span class="nc">Cookie</span> <span class="n">cookie</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Cookie</span><span class="o">(</span><span class="s">"kaptchaOwner"</span><span class="o">,</span> <span class="n">kaptchaOwner</span><span class="o">);</span>
+<span class="n">cookie</span><span class="o">.</span><span class="na">setMaxAge</span><span class="o">(</span><span class="mi">60</span><span class="o">);</span>
+<span class="n">cookie</span><span class="o">.</span><span class="na">setPath</span><span class="o">(</span><span class="n">contextPath</span><span class="o">);</span>
+<span class="n">response</span><span class="o">.</span><span class="na">addCookie</span><span class="o">(</span><span class="n">cookie</span><span class="o">);</span>
+
+<span class="c1">//将验证码存入redis</span>
+<span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getKaptchaKey</span><span class="o">(</span><span class="n">kaptchaOwner</span><span class="o">);</span>
+<span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">set</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="n">text</span><span class="o">,</span> <span class="mi">60</span><span class="o">,</span> <span class="nc">TimeUnit</span><span class="o">.</span><span class="na">SECONDS</span><span class="o">);</span>
+</code></pre></div></div>
+
+<p>检查验证码</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//检查验证码</span>
+<span class="nc">String</span> <span class="n">kaptcha</span> <span class="o">=</span> <span class="kc">null</span><span class="o">;</span>
+<span class="k">if</span> <span class="o">(</span><span class="nc">StringUtils</span><span class="o">.</span><span class="na">isNotBlank</span><span class="o">(</span><span class="n">kaptchaOwner</span><span class="o">))</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getKaptchaKey</span><span class="o">(</span><span class="n">kaptchaOwner</span><span class="o">);</span>
+    <span class="n">kaptcha</span> <span class="o">=</span> <span class="o">(</span><span class="nc">String</span><span class="o">)</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">get</span><span class="o">(</span><span class="n">redisKey</span><span class="o">);</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="redis记录登录凭证">Redis记录登录凭证</h3>
+
+<p>redis key</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//登录凭证</span>
+<span class="kd">public</span> <span class="kd">static</span> <span class="nc">String</span> <span class="nf">getTicketKey</span><span class="o">(</span><span class="nc">String</span> <span class="n">ticket</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">return</span> <span class="no">PREFIX_TICKET</span> <span class="o">+</span> <span class="no">SPLIT</span> <span class="o">+</span> <span class="n">ticket</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<h3 id="redis缓存用户信息">Redis缓存用户信息</h3>
+
+<ul>
+  <li>
+    <p>缓存时，如果取到，则取，不然，添加缓存，更新数据时，也要更新缓存（但是一般是直接删除，下次请求重查即可）（更新数据可能会有并发问题）。</p>
+
+    <ul>
+      <li>优先缓存取值</li>
+      <li>取不到，初始化缓存</li>
+      <li>数据变化，清除缓存</li>
+    </ul>
+
+    <p>在service层定义三个函数，分别初始化缓存，获得缓存，清除缓存</p>
+
+    <div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//从缓存中取数据</span>
+<span class="kd">private</span> <span class="nc">User</span> <span class="nf">getCache</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getUserKey</span><span class="o">(</span><span class="n">userId</span><span class="o">);</span>
+    <span class="k">return</span> <span class="o">(</span><span class="nc">User</span><span class="o">)</span> <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">get</span><span class="o">(</span><span class="n">redisKey</span><span class="o">);</span>
+<span class="o">}</span>
+  
+<span class="c1">//初始化缓存</span>
+<span class="kd">private</span> <span class="nc">User</span> <span class="nf">initCache</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">User</span> <span class="n">user</span> <span class="o">=</span> <span class="n">userMapper</span><span class="o">.</span><span class="na">selectById</span><span class="o">(</span><span class="n">userId</span><span class="o">);</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getUserKey</span><span class="o">(</span><span class="n">userId</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">opsForValue</span><span class="o">().</span><span class="na">set</span><span class="o">(</span><span class="n">redisKey</span><span class="o">,</span> <span class="n">user</span><span class="o">,</span> <span class="mi">3600</span><span class="o">,</span> <span class="nc">TimeUnit</span><span class="o">.</span><span class="na">SECONDS</span><span class="o">);</span>
+    <span class="k">return</span> <span class="n">user</span><span class="o">;</span>
+<span class="o">}</span>
+  
+<span class="c1">//清除缓存</span>
+<span class="kd">private</span> <span class="kt">void</span> <span class="nf">clearCache</span><span class="o">(</span><span class="kt">int</span> <span class="n">userId</span><span class="o">)</span> <span class="o">{</span>
+    <span class="nc">String</span> <span class="n">redisKey</span> <span class="o">=</span> <span class="nc">RedisKeyUtil</span><span class="o">.</span><span class="na">getUserKey</span><span class="o">(</span><span class="n">userId</span><span class="o">);</span>
+    <span class="n">redisTemplate</span><span class="o">.</span><span class="na">delete</span><span class="o">(</span><span class="n">redisKey</span><span class="o">);</span>
+<span class="o">}</span>
+</code></pre></div>    </div>
+  </li>
+</ul>
+
+
+</article>
+      </div>
+    </main>
+
+    
+  </body>
+</html>

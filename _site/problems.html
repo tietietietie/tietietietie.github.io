@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>社区论坛：问题汇总</title>
+
+  <!-- Begin Jekyll SEO tag v2.6.1 -->
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="社区论坛：问题汇总" />
+<meta name="author" content="tie" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Problems Chapter 1 1.不能访问阿里云镜像 在settings–&gt;Maven–&gt;importing–&gt;VM importer options处添加如下代码，修改安全协议。 -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true 2.ctrl+函数名不能访问其源代码 热键冲突，在settings–&gt;keymap–&gt;main view –&gt; navigation中找到declaration，发现其快捷键其实是ctrl+alt+鼠标右键。 3.编译Test项目时，卡在Resolving Maven dependencies 在settings–&gt;Maven–&gt;importing–&gt;VM importer options修改JVM参数为 -Xms1024m -Xmx2048m。修改了heap值。 4.idea找不到new interface 点new–&gt;class，然后选interface 5.修改了代码没有生效 忘记recompile直接run了，点击build—&gt;rebuild project即可。 6.如何快速处理异常（快捷方式） 参考这里，快捷键是alt+enter 7.无法访问SpringMVC的静态资源 添加如下配置 #静态资源 spring.mvc.static-path-pattern=/static/** spring.resources.static-locations=classpath:/static 8.忘记了mysql的初始密码 删掉mysql然后重装，如何删除mysql参考这里 如何设置自己的密码(注意分号结尾) alter user root@localhost identified by ‘wodemima&#39;; 9.generate快捷键失效 修改keymap的generate快捷键为alt+f12 10.报错Error creating bean with name ‘dataSource’ defined in class path resource 版本我兼容,我下载的是新版的springboot,使用的是旧版的mybatis(2.1.2)和mysql(8.0.15) jar包,更新Jar包Bug就没了,以后一定不要新旧版本混用. 11.更新数据库表项时报错：org.apache.ibatis.binding.BindingException: Parameter ‘idList’ not found 参考这里，因为参数默认是按照参数顺序从接口传到mapper的，需要添加@Param注解 12.链接mysql报错：Public Key Retrieval is not allowed 参考这里，在url加上allowPublicKeyRetrieval=true参数， 但是我打开mysql workbench的相应数据库后，Bug自动消失了(+_+)? Chapter 2 1.端口号被占用，程序已经启动 强制关闭端口对应的进程，在命令行中使用如下命令 netstat -ano|findstr &quot;15213&quot; //可以确定对应PID taskkill /pid 5692 -t -f //将进程杀死 2.执行sql语句找不到传入的参数 原因：使用动态sql查询语句，必须对参数加注解 @Update({ &quot;&lt;script&gt; &quot;, &quot;update login_ticket set status=#{status} where ticket=#{ticket} &quot;, &quot;&lt;if test=\&quot;ticket != null \&quot; &gt; &quot;, &quot;and 1 = 1 &quot;, &quot;&lt;/if&gt; &quot;, &quot;&lt;/script&gt;&quot; }) int updateStatus(@Param(&quot;ticket&quot;) String ticket, @Param(&quot;status&quot;) int status); 3.不能显示用户上传的头像 文件路径名写错，忘记在增加的子路径前面加上”/” 4.找不到Main方法 错误: 在类 com.nowcoder.community.util.CommunityUtil 中找不到 main 方法, 请将 main 方法定义为: public static void main(String[] args) 否则 JavaFX 应用程序类必须扩展javafx.application.Application 解决办法： Chapter 3 1.显示帖子评论的时候，模板引擎报错 原因： if (reply.getTargetId() != 0) { replyVo.put(&quot;target&quot;, userService.findUserById(reply.getTargetId())); } 因为当不存在回复对象target时，也要放入target if (reply.getTargetId() != 0) { replyVo.put(&quot;target&quot;, userService.findUserById(reply.getTargetId())); } else replyVo.put(&quot;target&quot;, null); 2.显示帖子评论时，无法获得page的offset变量 原因：page的getOffset方法写成了page.getOffSet()。 3.写Mapper接口时，给参数声明Param注解会报错 //新增消息 int insertMessage(@Param(&quot;message&quot;)Message message); 去掉注解不会报错，原因传入实体类型和传入基本类型，xml的写法是不同的， public List&lt;student&gt; selectuser(@Param(value = &quot;page&quot;)int pn ,@Param(value = &quot;st&quot;)student student); &lt;select id=&quot;selectuser&quot; resultType=&quot;com.user.entity.student&quot;&gt; SELECT * FROM student where sname like concat(concat(&quot;%&quot;,#{st.sname}),&quot;%&quot;) LIMIT #{page} ,5 &lt;/select&gt; 参考这里 Chapter 5 1.kafka报错 错误： Caused by: java.lang.IllegalStateException: Topic(s) [comment, follow, like] is/are not present and missingTopicsFatal is true 解决办法：修改application.properties spring.kafka.listener.missing-topics-fatal=false 2.Aspect报错 aspect默认记录service的日志，并默认一定有request，但是在kafka使用controller时，并没有contoller 错误： Caused by: java.lang.NullPointerException: null at com.nowcoder.community.aspect.ServiceAspect.before(ServiceAspect.java:31) 解决办法：考虑空值情况 Chapter 7 1.导入SecurityDemo是报错 解决办法： 不能用Idea导入，直接打开就可以了。。。 2.在设置异步请求的_csrf令牌时，前端报错 错误： jquery-3.3.1.min.js:2 Uncaught TypeError: Cannot read property ‘toLowerCase’ of undefined at Object.setRequestHeader (jquery-3.3.1.min.js:2) at HTMLDocument. (index.js:12) at HTMLDocument.dispatch (jquery-3.3.1.min.js:2) at HTMLDocument.y.handle (jquery-3.3.1.min.js:2) at Object.trigger (jquery-3.3.1.min.js:2) at Function.ajax (jquery-3.3.1.min.js:2) at Function.w. [as post] (jquery-3.3.1.min.js:2) at HTMLButtonElement.publish (index.js:19) at HTMLButtonElement.dispatch (jquery-3.3.1.min.js:2) at HTMLButtonElement.y.handle (jquery-3.3.1.min.js:2) 代码： $(function(){ $(&quot;#publishBtn&quot;).click(publish); }); function publish() { $(&quot;#publishModal&quot;).modal(&quot;hide&quot;); //发送AJAX请求前，需要带上CSRF令牌 var token = $(&quot;mata[name=&#39;_csrf&#39;]&quot;).attr(&quot;content&quot;); var header = $(&quot;mata[name=&#39;_csrf_header&#39;]&quot;).attr(&quot;content&quot;); $(document).ajaxSend(function(e, xhr, options){ xhr.setRequestHeader(header, token); }); //先返回结果再显示 //获取标题/内容 var title = $(&quot;#recipient-name&quot;).val(); var content = $(&quot;#message-text&quot;).val(); //发送异步请求 $.post( &quot;/community/discuss/add&quot;, {&quot;title&quot;:title,&quot;content&quot;:content}, function(data){ data = $.parseJSON(data); //提示框显示返回消息 $(&quot;#hintBody&quot;).text(data.msg); //显示提示框/两秒后自动隐藏 $(&quot;#hintModal&quot;).modal(&quot;show&quot;); setTimeout(function(){ $(&quot;#hintModal&quot;).modal(&quot;hide&quot;); if(data.code == 0) { window.location.reload(); } }, 2000); } ); } 3.Kakfa的log报错 windows端的Bug，每次只能手动删除Log文件然后重启 4.redis无法连接 Could not connect to Redis at 127.0.0.1:6379: 解决办法：需要先启动redis-server 5.无法访问云服务器的头像 因为拼路径时，忘记在前面添加http://，导致模板会默认的把当前路径加在前面。localhost:15213XXXXXXXXXX真正的路径 6.插入30W个数据Mysql无法显示数量 要过一段时间数据才能更新。。 7.查询首页帖子报错 原因，对DiscusspostServer.class初始化函数忘记加上@PostConstruct注解，导致Caffeine缓存无法初始化。" />
+<meta property="og:description" content="Problems Chapter 1 1.不能访问阿里云镜像 在settings–&gt;Maven–&gt;importing–&gt;VM importer options处添加如下代码，修改安全协议。 -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true 2.ctrl+函数名不能访问其源代码 热键冲突，在settings–&gt;keymap–&gt;main view –&gt; navigation中找到declaration，发现其快捷键其实是ctrl+alt+鼠标右键。 3.编译Test项目时，卡在Resolving Maven dependencies 在settings–&gt;Maven–&gt;importing–&gt;VM importer options修改JVM参数为 -Xms1024m -Xmx2048m。修改了heap值。 4.idea找不到new interface 点new–&gt;class，然后选interface 5.修改了代码没有生效 忘记recompile直接run了，点击build—&gt;rebuild project即可。 6.如何快速处理异常（快捷方式） 参考这里，快捷键是alt+enter 7.无法访问SpringMVC的静态资源 添加如下配置 #静态资源 spring.mvc.static-path-pattern=/static/** spring.resources.static-locations=classpath:/static 8.忘记了mysql的初始密码 删掉mysql然后重装，如何删除mysql参考这里 如何设置自己的密码(注意分号结尾) alter user root@localhost identified by ‘wodemima&#39;; 9.generate快捷键失效 修改keymap的generate快捷键为alt+f12 10.报错Error creating bean with name ‘dataSource’ defined in class path resource 版本我兼容,我下载的是新版的springboot,使用的是旧版的mybatis(2.1.2)和mysql(8.0.15) jar包,更新Jar包Bug就没了,以后一定不要新旧版本混用. 11.更新数据库表项时报错：org.apache.ibatis.binding.BindingException: Parameter ‘idList’ not found 参考这里，因为参数默认是按照参数顺序从接口传到mapper的，需要添加@Param注解 12.链接mysql报错：Public Key Retrieval is not allowed 参考这里，在url加上allowPublicKeyRetrieval=true参数， 但是我打开mysql workbench的相应数据库后，Bug自动消失了(+_+)? Chapter 2 1.端口号被占用，程序已经启动 强制关闭端口对应的进程，在命令行中使用如下命令 netstat -ano|findstr &quot;15213&quot; //可以确定对应PID taskkill /pid 5692 -t -f //将进程杀死 2.执行sql语句找不到传入的参数 原因：使用动态sql查询语句，必须对参数加注解 @Update({ &quot;&lt;script&gt; &quot;, &quot;update login_ticket set status=#{status} where ticket=#{ticket} &quot;, &quot;&lt;if test=\&quot;ticket != null \&quot; &gt; &quot;, &quot;and 1 = 1 &quot;, &quot;&lt;/if&gt; &quot;, &quot;&lt;/script&gt;&quot; }) int updateStatus(@Param(&quot;ticket&quot;) String ticket, @Param(&quot;status&quot;) int status); 3.不能显示用户上传的头像 文件路径名写错，忘记在增加的子路径前面加上”/” 4.找不到Main方法 错误: 在类 com.nowcoder.community.util.CommunityUtil 中找不到 main 方法, 请将 main 方法定义为: public static void main(String[] args) 否则 JavaFX 应用程序类必须扩展javafx.application.Application 解决办法： Chapter 3 1.显示帖子评论的时候，模板引擎报错 原因： if (reply.getTargetId() != 0) { replyVo.put(&quot;target&quot;, userService.findUserById(reply.getTargetId())); } 因为当不存在回复对象target时，也要放入target if (reply.getTargetId() != 0) { replyVo.put(&quot;target&quot;, userService.findUserById(reply.getTargetId())); } else replyVo.put(&quot;target&quot;, null); 2.显示帖子评论时，无法获得page的offset变量 原因：page的getOffset方法写成了page.getOffSet()。 3.写Mapper接口时，给参数声明Param注解会报错 //新增消息 int insertMessage(@Param(&quot;message&quot;)Message message); 去掉注解不会报错，原因传入实体类型和传入基本类型，xml的写法是不同的， public List&lt;student&gt; selectuser(@Param(value = &quot;page&quot;)int pn ,@Param(value = &quot;st&quot;)student student); &lt;select id=&quot;selectuser&quot; resultType=&quot;com.user.entity.student&quot;&gt; SELECT * FROM student where sname like concat(concat(&quot;%&quot;,#{st.sname}),&quot;%&quot;) LIMIT #{page} ,5 &lt;/select&gt; 参考这里 Chapter 5 1.kafka报错 错误： Caused by: java.lang.IllegalStateException: Topic(s) [comment, follow, like] is/are not present and missingTopicsFatal is true 解决办法：修改application.properties spring.kafka.listener.missing-topics-fatal=false 2.Aspect报错 aspect默认记录service的日志，并默认一定有request，但是在kafka使用controller时，并没有contoller 错误： Caused by: java.lang.NullPointerException: null at com.nowcoder.community.aspect.ServiceAspect.before(ServiceAspect.java:31) 解决办法：考虑空值情况 Chapter 7 1.导入SecurityDemo是报错 解决办法： 不能用Idea导入，直接打开就可以了。。。 2.在设置异步请求的_csrf令牌时，前端报错 错误： jquery-3.3.1.min.js:2 Uncaught TypeError: Cannot read property ‘toLowerCase’ of undefined at Object.setRequestHeader (jquery-3.3.1.min.js:2) at HTMLDocument. (index.js:12) at HTMLDocument.dispatch (jquery-3.3.1.min.js:2) at HTMLDocument.y.handle (jquery-3.3.1.min.js:2) at Object.trigger (jquery-3.3.1.min.js:2) at Function.ajax (jquery-3.3.1.min.js:2) at Function.w. [as post] (jquery-3.3.1.min.js:2) at HTMLButtonElement.publish (index.js:19) at HTMLButtonElement.dispatch (jquery-3.3.1.min.js:2) at HTMLButtonElement.y.handle (jquery-3.3.1.min.js:2) 代码： $(function(){ $(&quot;#publishBtn&quot;).click(publish); }); function publish() { $(&quot;#publishModal&quot;).modal(&quot;hide&quot;); //发送AJAX请求前，需要带上CSRF令牌 var token = $(&quot;mata[name=&#39;_csrf&#39;]&quot;).attr(&quot;content&quot;); var header = $(&quot;mata[name=&#39;_csrf_header&#39;]&quot;).attr(&quot;content&quot;); $(document).ajaxSend(function(e, xhr, options){ xhr.setRequestHeader(header, token); }); //先返回结果再显示 //获取标题/内容 var title = $(&quot;#recipient-name&quot;).val(); var content = $(&quot;#message-text&quot;).val(); //发送异步请求 $.post( &quot;/community/discuss/add&quot;, {&quot;title&quot;:title,&quot;content&quot;:content}, function(data){ data = $.parseJSON(data); //提示框显示返回消息 $(&quot;#hintBody&quot;).text(data.msg); //显示提示框/两秒后自动隐藏 $(&quot;#hintModal&quot;).modal(&quot;show&quot;); setTimeout(function(){ $(&quot;#hintModal&quot;).modal(&quot;hide&quot;); if(data.code == 0) { window.location.reload(); } }, 2000); } ); } 3.Kakfa的log报错 windows端的Bug，每次只能手动删除Log文件然后重启 4.redis无法连接 Could not connect to Redis at 127.0.0.1:6379: 解决办法：需要先启动redis-server 5.无法访问云服务器的头像 因为拼路径时，忘记在前面添加http://，导致模板会默认的把当前路径加在前面。localhost:15213XXXXXXXXXX真正的路径 6.插入30W个数据Mysql无法显示数量 要过一段时间数据才能更新。。 7.查询首页帖子报错 原因，对DiscusspostServer.class初始化函数忘记加上@PostConstruct注解，导致Caffeine缓存无法初始化。" />
+<link rel="canonical" href="https://github.com/tietietietie/tietietietie.github.io/problems.html" />
+<meta property="og:url" content="https://github.com/tietietietie/tietietietie.github.io/problems.html" />
+<meta property="og:site_name" content="tie’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-07-01T08:32:00+08:00" />
+<script type="application/ld+json">
+{"url":"https://github.com/tietietietie/tietietietie.github.io/problems.html","headline":"社区论坛：问题汇总","dateModified":"2020-07-01T08:32:00+08:00","datePublished":"2020-07-01T08:32:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://github.com/tietietietie/tietietietie.github.io/problems.html"},"author":{"@type":"Person","name":"tie"},"description":"Problems Chapter 1 1.不能访问阿里云镜像 在settings–&gt;Maven–&gt;importing–&gt;VM importer options处添加如下代码，修改安全协议。 -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true 2.ctrl+函数名不能访问其源代码 热键冲突，在settings–&gt;keymap–&gt;main view –&gt; navigation中找到declaration，发现其快捷键其实是ctrl+alt+鼠标右键。 3.编译Test项目时，卡在Resolving Maven dependencies 在settings–&gt;Maven–&gt;importing–&gt;VM importer options修改JVM参数为 -Xms1024m -Xmx2048m。修改了heap值。 4.idea找不到new interface 点new–&gt;class，然后选interface 5.修改了代码没有生效 忘记recompile直接run了，点击build—&gt;rebuild project即可。 6.如何快速处理异常（快捷方式） 参考这里，快捷键是alt+enter 7.无法访问SpringMVC的静态资源 添加如下配置 #静态资源 spring.mvc.static-path-pattern=/static/** spring.resources.static-locations=classpath:/static 8.忘记了mysql的初始密码 删掉mysql然后重装，如何删除mysql参考这里 如何设置自己的密码(注意分号结尾) alter user root@localhost identified by ‘wodemima&#39;; 9.generate快捷键失效 修改keymap的generate快捷键为alt+f12 10.报错Error creating bean with name ‘dataSource’ defined in class path resource 版本我兼容,我下载的是新版的springboot,使用的是旧版的mybatis(2.1.2)和mysql(8.0.15) jar包,更新Jar包Bug就没了,以后一定不要新旧版本混用. 11.更新数据库表项时报错：org.apache.ibatis.binding.BindingException: Parameter ‘idList’ not found 参考这里，因为参数默认是按照参数顺序从接口传到mapper的，需要添加@Param注解 12.链接mysql报错：Public Key Retrieval is not allowed 参考这里，在url加上allowPublicKeyRetrieval=true参数， 但是我打开mysql workbench的相应数据库后，Bug自动消失了(+_+)? Chapter 2 1.端口号被占用，程序已经启动 强制关闭端口对应的进程，在命令行中使用如下命令 netstat -ano|findstr &quot;15213&quot; //可以确定对应PID taskkill /pid 5692 -t -f //将进程杀死 2.执行sql语句找不到传入的参数 原因：使用动态sql查询语句，必须对参数加注解 @Update({ &quot;&lt;script&gt; &quot;, &quot;update login_ticket set status=#{status} where ticket=#{ticket} &quot;, &quot;&lt;if test=\\&quot;ticket != null \\&quot; &gt; &quot;, &quot;and 1 = 1 &quot;, &quot;&lt;/if&gt; &quot;, &quot;&lt;/script&gt;&quot; }) int updateStatus(@Param(&quot;ticket&quot;) String ticket, @Param(&quot;status&quot;) int status); 3.不能显示用户上传的头像 文件路径名写错，忘记在增加的子路径前面加上”/” 4.找不到Main方法 错误: 在类 com.nowcoder.community.util.CommunityUtil 中找不到 main 方法, 请将 main 方法定义为: public static void main(String[] args) 否则 JavaFX 应用程序类必须扩展javafx.application.Application 解决办法： Chapter 3 1.显示帖子评论的时候，模板引擎报错 原因： if (reply.getTargetId() != 0) { replyVo.put(&quot;target&quot;, userService.findUserById(reply.getTargetId())); } 因为当不存在回复对象target时，也要放入target if (reply.getTargetId() != 0) { replyVo.put(&quot;target&quot;, userService.findUserById(reply.getTargetId())); } else replyVo.put(&quot;target&quot;, null); 2.显示帖子评论时，无法获得page的offset变量 原因：page的getOffset方法写成了page.getOffSet()。 3.写Mapper接口时，给参数声明Param注解会报错 //新增消息 int insertMessage(@Param(&quot;message&quot;)Message message); 去掉注解不会报错，原因传入实体类型和传入基本类型，xml的写法是不同的， public List&lt;student&gt; selectuser(@Param(value = &quot;page&quot;)int pn ,@Param(value = &quot;st&quot;)student student); &lt;select id=&quot;selectuser&quot; resultType=&quot;com.user.entity.student&quot;&gt; SELECT * FROM student where sname like concat(concat(&quot;%&quot;,#{st.sname}),&quot;%&quot;) LIMIT #{page} ,5 &lt;/select&gt; 参考这里 Chapter 5 1.kafka报错 错误： Caused by: java.lang.IllegalStateException: Topic(s) [comment, follow, like] is/are not present and missingTopicsFatal is true 解决办法：修改application.properties spring.kafka.listener.missing-topics-fatal=false 2.Aspect报错 aspect默认记录service的日志，并默认一定有request，但是在kafka使用controller时，并没有contoller 错误： Caused by: java.lang.NullPointerException: null at com.nowcoder.community.aspect.ServiceAspect.before(ServiceAspect.java:31) 解决办法：考虑空值情况 Chapter 7 1.导入SecurityDemo是报错 解决办法： 不能用Idea导入，直接打开就可以了。。。 2.在设置异步请求的_csrf令牌时，前端报错 错误： jquery-3.3.1.min.js:2 Uncaught TypeError: Cannot read property ‘toLowerCase’ of undefined at Object.setRequestHeader (jquery-3.3.1.min.js:2) at HTMLDocument. (index.js:12) at HTMLDocument.dispatch (jquery-3.3.1.min.js:2) at HTMLDocument.y.handle (jquery-3.3.1.min.js:2) at Object.trigger (jquery-3.3.1.min.js:2) at Function.ajax (jquery-3.3.1.min.js:2) at Function.w. [as post] (jquery-3.3.1.min.js:2) at HTMLButtonElement.publish (index.js:19) at HTMLButtonElement.dispatch (jquery-3.3.1.min.js:2) at HTMLButtonElement.y.handle (jquery-3.3.1.min.js:2) 代码： $(function(){ $(&quot;#publishBtn&quot;).click(publish); }); function publish() { $(&quot;#publishModal&quot;).modal(&quot;hide&quot;); //发送AJAX请求前，需要带上CSRF令牌 var token = $(&quot;mata[name=&#39;_csrf&#39;]&quot;).attr(&quot;content&quot;); var header = $(&quot;mata[name=&#39;_csrf_header&#39;]&quot;).attr(&quot;content&quot;); $(document).ajaxSend(function(e, xhr, options){ xhr.setRequestHeader(header, token); }); //先返回结果再显示 //获取标题/内容 var title = $(&quot;#recipient-name&quot;).val(); var content = $(&quot;#message-text&quot;).val(); //发送异步请求 $.post( &quot;/community/discuss/add&quot;, {&quot;title&quot;:title,&quot;content&quot;:content}, function(data){ data = $.parseJSON(data); //提示框显示返回消息 $(&quot;#hintBody&quot;).text(data.msg); //显示提示框/两秒后自动隐藏 $(&quot;#hintModal&quot;).modal(&quot;show&quot;); setTimeout(function(){ $(&quot;#hintModal&quot;).modal(&quot;hide&quot;); if(data.code == 0) { window.location.reload(); } }, 2000); } ); } 3.Kakfa的log报错 windows端的Bug，每次只能手动删除Log文件然后重启 4.redis无法连接 Could not connect to Redis at 127.0.0.1:6379: 解决办法：需要先启动redis-server 5.无法访问云服务器的头像 因为拼路径时，忘记在前面添加http://，导致模板会默认的把当前路径加在前面。localhost:15213XXXXXXXXXX真正的路径 6.插入30W个数据Mysql无法显示数量 要过一段时间数据才能更新。。 7.查询首页帖子报错 原因，对DiscusspostServer.class初始化函数忘记加上@PostConstruct注解，导致Caffeine缓存无法初始化。","@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  <link type="application/atom+xml" rel="alternate" href="https://github.com/tietietietie/tietietietie.github.io/feed.xml" title="tie's blog" />
+
+  <link rel="shortcut icon" type="image/x-icon" href="/logo.png" />
+  <link rel="stylesheet" href="/assets/css/main.css" />
+</head><body a="auto">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        <a href="/">..</a>
+
+<article>
+  <p class="post-meta">
+    <time datetime="2020-07-01 08:32:00 +0800">2020-07-01</time>
+  </p>
+  
+  <h1>社区论坛：问题汇总</h1>
+
+  <h1 id="problems">Problems</h1>
+
+<h2 id="chapter-1">Chapter 1</h2>
+
+<h3 id="1不能访问阿里云镜像">1.不能访问阿里云镜像</h3>
+
+<p>在settings–&gt;Maven–&gt;importing–&gt;VM importer options处添加如下代码，修改安全协议。</p>
+
+<blockquote>
+  <p>-Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true</p>
+</blockquote>
+
+<h3 id="2ctrl函数名不能访问其源代码">2.ctrl+函数名不能访问其源代码</h3>
+
+<p>热键冲突，在settings–&gt;keymap–&gt;main view –&gt; navigation中找到declaration，发现其快捷键其实是ctrl+alt+鼠标右键。</p>
+
+<h3 id="3编译test项目时卡在resolving-maven-dependencies">3.编译Test项目时，卡在Resolving Maven dependencies</h3>
+
+<p>在settings–&gt;Maven–&gt;importing–&gt;VM importer options修改JVM参数为 -Xms1024m -Xmx2048m。修改了heap值。</p>
+
+<h3 id="4idea找不到new-interface">4.idea找不到new interface</h3>
+
+<p>点new–&gt;class，然后选interface</p>
+
+<h3 id="5修改了代码没有生效">5.修改了代码没有生效</h3>
+
+<p>忘记recompile直接run了，点击build—&gt;rebuild project即可。</p>
+
+<h3 id="6如何快速处理异常快捷方式">6.如何快速处理异常（快捷方式）</h3>
+
+<p>参考<a href="https://blog.csdn.net/a200822146085/article/details/92805214">这里</a>，快捷键是alt+enter</p>
+
+<h3 id="7无法访问springmvc的静态资源">7.无法访问SpringMVC的静态资源</h3>
+
+<p>添加如下配置</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="err">#</span><span class="n">静态资源</span>
+<span class="n">spring</span><span class="o">.</span><span class="na">mvc</span><span class="o">.</span><span class="na">static</span><span class="o">-</span><span class="n">path</span><span class="o">-</span><span class="n">pattern</span><span class="o">=/</span><span class="kd">static</span><span class="o">/**</span>
+<span class="n">spring</span><span class="o">.</span><span class="na">resources</span><span class="o">.</span><span class="na">static</span><span class="o">-</span><span class="n">locations</span><span class="o">=</span><span class="nl">classpath:</span><span class="o">/</span><span class="kd">static</span>
+</code></pre></div></div>
+
+<h3 id="8忘记了mysql的初始密码">8.忘记了mysql的初始密码</h3>
+
+<p>删掉mysql然后重装，如何删除mysql参考<a href="https://jingyan.baidu.com/article/47a29f24ba369bc0142399db.html">这里</a></p>
+
+<p>如何设置自己的密码(注意分号结尾)</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>alter user root@localhost identified by ‘wodemima';
+</code></pre></div></div>
+
+<h3 id="9generate快捷键失效">9.generate快捷键失效</h3>
+
+<p>修改keymap的generate快捷键为alt+f12</p>
+
+<h3 id="10报错error-creating-bean-with-name-datasource-defined-in-class-path-resource">10.报错Error creating bean with name ‘dataSource’ defined in class path resource</h3>
+
+<p>版本我兼容,我下载的是新版的springboot,使用的是旧版的mybatis(2.1.2)和mysql(8.0.15) jar包,更新Jar包Bug就没了,以后一定不要新旧版本混用.</p>
+
+<h3 id="11更新数据库表项时报错orgapacheibatisbindingbindingexception-parameter-idlist-not-found">11.更新数据库表项时报错：org.apache.ibatis.binding.BindingException: Parameter ‘idList’ not found</h3>
+
+<p>参考<a href="https://blog.csdn.net/qq_28379809/article/details/83342196?depth_1-utm_source=distribute.pc_relevant.none-task-blog-BlogCommendFromBaidu-1&amp;utm_source=distribute.pc_relevant.none-task-blog-BlogCommendFromBaidu-1">这里</a>，因为参数默认是按照参数顺序从接口传到mapper的，需要添加@Param注解</p>
+
+<h3 id="12链接mysql报错public-key-retrieval-is-not-allowed">12.链接mysql报错：Public Key Retrieval is not allowed</h3>
+
+<p>参考<a href="https://www.jianshu.com/p/a1d262143919">这里</a>，在url加上allowPublicKeyRetrieval=true参数，</p>
+
+<p>但是我打开mysql workbench的相应数据库后，Bug自动消失了(+_+)?</p>
+
+<h2 id="chapter-2">Chapter 2</h2>
+
+<h3 id="1端口号被占用程序已经启动">1.端口号被占用，程序已经启动</h3>
+
+<p>强制关闭端口对应的进程，在命令行中使用如下命令</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>netstat -ano|findstr "15213"
+//可以确定对应PID
+taskkill /pid 5692 -t -f
+//将进程杀死
+</code></pre></div></div>
+
+<h3 id="2执行sql语句找不到传入的参数">2.执行sql语句找不到传入的参数</h3>
+
+<p>原因：使用动态sql查询语句，必须对参数加注解</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="nd">@Update</span><span class="o">({</span>
+            <span class="s">"&lt;script&gt; "</span><span class="o">,</span>
+            <span class="s">"update login_ticket set status=#{status} where ticket=#{ticket} "</span><span class="o">,</span>
+            <span class="s">"&lt;if test=\"ticket != null \" &gt; "</span><span class="o">,</span>
+            <span class="s">"and 1 = 1 "</span><span class="o">,</span>
+            <span class="s">"&lt;/if&gt; "</span><span class="o">,</span>
+            <span class="s">"&lt;/script&gt;"</span>
+    <span class="o">})</span>
+    <span class="kt">int</span> <span class="nf">updateStatus</span><span class="o">(</span><span class="nd">@Param</span><span class="o">(</span><span class="s">"ticket"</span><span class="o">)</span> <span class="nc">String</span> <span class="n">ticket</span><span class="o">,</span> <span class="nd">@Param</span><span class="o">(</span><span class="s">"status"</span><span class="o">)</span> <span class="kt">int</span> <span class="n">status</span><span class="o">);</span>
+</code></pre></div></div>
+
+<h3 id="3不能显示用户上传的头像">3.不能显示用户上传的头像</h3>
+
+<p>文件路径名写错，忘记在增加的子路径前面加上”/”</p>
+
+<h3 id="4找不到main方法">4.找不到Main方法</h3>
+
+<blockquote>
+  <p>错误: 在类 com.nowcoder.community.util.CommunityUtil 中找不到 main 方法, 请将 main 方法定义为:
+  public static void main(String[] args)
+否则 JavaFX 应用程序类必须扩展javafx.application.Application</p>
+</blockquote>
+
+<p>解决办法：</p>
+
+<h2 id="chapter-3">Chapter 3</h2>
+
+<h3 id="1显示帖子评论的时候模板引擎报错">1.显示帖子评论的时候，模板引擎报错</h3>
+
+<p>原因：</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="o">(</span><span class="n">reply</span><span class="o">.</span><span class="na">getTargetId</span><span class="o">()</span> <span class="o">!=</span> <span class="mi">0</span><span class="o">)</span> <span class="o">{</span>
+	<span class="n">replyVo</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"target"</span><span class="o">,</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">(</span><span class="n">reply</span><span class="o">.</span><span class="na">getTargetId</span><span class="o">()));</span>
+<span class="o">}</span> 
+</code></pre></div></div>
+
+<p>因为当不存在回复对象target时，也要放入target</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="o">(</span><span class="n">reply</span><span class="o">.</span><span class="na">getTargetId</span><span class="o">()</span> <span class="o">!=</span> <span class="mi">0</span><span class="o">)</span> <span class="o">{</span>
+    <span class="n">replyVo</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"target"</span><span class="o">,</span> <span class="n">userService</span><span class="o">.</span><span class="na">findUserById</span><span class="o">(</span><span class="n">reply</span><span class="o">.</span><span class="na">getTargetId</span><span class="o">()));</span>
+<span class="o">}</span> <span class="k">else</span>
+    <span class="n">replyVo</span><span class="o">.</span><span class="na">put</span><span class="o">(</span><span class="s">"target"</span><span class="o">,</span> <span class="kc">null</span><span class="o">);</span>
+</code></pre></div></div>
+
+<h3 id="2显示帖子评论时无法获得page的offset变量">2.显示帖子评论时，无法获得page的offset变量</h3>
+
+<p>原因：page的getOffset方法写成了page.getOffSet()。</p>
+
+<h3 id="3写mapper接口时给参数声明param注解会报错">3.写Mapper接口时，给参数声明Param注解会报错</h3>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">//新增消息</span>
+<span class="kt">int</span> <span class="nf">insertMessage</span><span class="o">(</span><span class="nd">@Param</span><span class="o">(</span><span class="s">"message"</span><span class="o">)</span><span class="nc">Message</span> <span class="n">message</span><span class="o">);</span>
+</code></pre></div></div>
+
+<p>去掉注解不会报错，原因传入实体类型和传入基本类型，xml的写法是不同的，</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">public</span> <span class="nc">List</span><span class="o">&lt;</span><span class="n">student</span><span class="o">&gt;</span> <span class="nf">selectuser</span><span class="o">(</span><span class="nd">@Param</span><span class="o">(</span><span class="n">value</span> <span class="o">=</span> <span class="s">"page"</span><span class="o">)</span><span class="kt">int</span> <span class="n">pn</span> <span class="o">,</span><span class="nd">@Param</span><span class="o">(</span><span class="n">value</span> <span class="o">=</span> <span class="s">"st"</span><span class="o">)</span><span class="n">student</span> <span class="n">student</span><span class="o">);</span>
+
+<span class="o">&lt;</span><span class="n">select</span> <span class="n">id</span><span class="o">=</span><span class="s">"selectuser"</span> <span class="n">resultType</span><span class="o">=</span><span class="s">"com.user.entity.student"</span><span class="o">&gt;</span>
+    <span class="no">SELECT</span> <span class="o">*</span> <span class="no">FROM</span> <span class="n">student</span>
+    <span class="n">where</span> <span class="n">sname</span> <span class="n">like</span> <span class="nf">concat</span><span class="o">(</span><span class="n">concat</span><span class="o">(</span><span class="s">"%"</span><span class="o">,</span><span class="err">#</span><span class="o">{</span><span class="n">st</span><span class="o">.</span><span class="na">sname</span><span class="o">}),</span><span class="s">"%"</span><span class="o">)</span>
+    <span class="no">LIMIT</span> <span class="err">#</span><span class="o">{</span><span class="n">page</span><span class="o">}</span> <span class="o">,</span><span class="mi">5</span>
+<span class="o">&lt;/</span><span class="n">select</span><span class="o">&gt;</span>
+</code></pre></div></div>
+
+<p>参考<a href="https://www.cnblogs.com/goloving/p/9241449.html">这里</a></p>
+
+<h2 id="chapter-5">Chapter 5</h2>
+
+<h3 id="1kafka报错">1.kafka报错</h3>
+
+<blockquote>
+  <p>错误：</p>
+
+  <p>Caused by: java.lang.IllegalStateException: Topic(s) [comment, follow, like] is/are not present and missingTopicsFatal is true</p>
+</blockquote>
+
+<p>解决办法：修改application.properties</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>spring.kafka.listener.missing-topics-fatal=false
+</code></pre></div></div>
+
+<h3 id="2aspect报错">2.Aspect报错</h3>
+
+<p>aspect默认记录service的日志，并默认一定有request，但是在kafka使用controller时，并没有contoller</p>
+
+<blockquote>
+  <p>错误：</p>
+
+  <p>Caused by: java.lang.NullPointerException: null
+	at com.nowcoder.community.aspect.ServiceAspect.before(ServiceAspect.java:31)</p>
+</blockquote>
+
+<p>解决办法：考虑空值情况</p>
+
+<h2 id="chapter-7">Chapter 7</h2>
+
+<h3 id="1导入securitydemo是报错">1.导入SecurityDemo是报错</h3>
+
+<p>解决办法：</p>
+
+<p>不能用Idea导入，直接打开就可以了。。。</p>
+
+<h3 id="2在设置异步请求的_csrf令牌时前端报错">2.在设置异步请求的_csrf令牌时，前端报错</h3>
+
+<p>错误：</p>
+
+<blockquote>
+  <p>jquery-3.3.1.min.js:2 Uncaught TypeError: Cannot read property ‘toLowerCase’ of undefined
+at Object.setRequestHeader (jquery-3.3.1.min.js:2)
+at HTMLDocument.<anonymous> (index.js:12)
+at HTMLDocument.dispatch (jquery-3.3.1.min.js:2)
+at HTMLDocument.y.handle (jquery-3.3.1.min.js:2)
+at Object.trigger (jquery-3.3.1.min.js:2)
+at Function.ajax (jquery-3.3.1.min.js:2)
+at Function.w.<computed> [as post] (jquery-3.3.1.min.js:2)
+at HTMLButtonElement.publish (index.js:19)
+at HTMLButtonElement.dispatch (jquery-3.3.1.min.js:2)
+at HTMLButtonElement.y.handle (jquery-3.3.1.min.js:2)</computed></anonymous></p>
+</blockquote>
+
+<p>代码：</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">$</span><span class="p">(</span><span class="kd">function</span><span class="p">(){</span>
+	<span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#publishBtn</span><span class="dl">"</span><span class="p">).</span><span class="nx">click</span><span class="p">(</span><span class="nx">publish</span><span class="p">);</span>
+<span class="p">});</span>
+
+
+<span class="kd">function</span> <span class="nx">publish</span><span class="p">()</span> <span class="p">{</span>
+	<span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#publishModal</span><span class="dl">"</span><span class="p">).</span><span class="nx">modal</span><span class="p">(</span><span class="dl">"</span><span class="s2">hide</span><span class="dl">"</span><span class="p">);</span>
+	<span class="c1">//发送AJAX请求前，需要带上CSRF令牌</span>
+    <span class="kd">var</span> <span class="nx">token</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">mata[name='_csrf']</span><span class="dl">"</span><span class="p">).</span><span class="nx">attr</span><span class="p">(</span><span class="dl">"</span><span class="s2">content</span><span class="dl">"</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">header</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">mata[name='_csrf_header']</span><span class="dl">"</span><span class="p">).</span><span class="nx">attr</span><span class="p">(</span><span class="dl">"</span><span class="s2">content</span><span class="dl">"</span><span class="p">);</span>
+    <span class="nx">$</span><span class="p">(</span><span class="nb">document</span><span class="p">).</span><span class="nx">ajaxSend</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">e</span><span class="p">,</span> <span class="nx">xhr</span><span class="p">,</span> <span class="nx">options</span><span class="p">){</span>
+        <span class="nx">xhr</span><span class="p">.</span><span class="nx">setRequestHeader</span><span class="p">(</span><span class="nx">header</span><span class="p">,</span> <span class="nx">token</span><span class="p">);</span>
+    <span class="p">});</span>
+	<span class="c1">//先返回结果再显示</span>
+    <span class="c1">//获取标题/内容</span>
+    <span class="kd">var</span> <span class="nx">title</span> <span class="o">=</span>  <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#recipient-name</span><span class="dl">"</span><span class="p">).</span><span class="nx">val</span><span class="p">();</span>
+    <span class="kd">var</span> <span class="nx">content</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#message-text</span><span class="dl">"</span><span class="p">).</span><span class="nx">val</span><span class="p">();</span>
+    <span class="c1">//发送异步请求</span>
+    <span class="nx">$</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span>
+        <span class="dl">"</span><span class="s2">/community/discuss/add</span><span class="dl">"</span><span class="p">,</span>
+        <span class="p">{</span><span class="dl">"</span><span class="s2">title</span><span class="dl">"</span><span class="p">:</span><span class="nx">title</span><span class="p">,</span><span class="dl">"</span><span class="s2">content</span><span class="dl">"</span><span class="p">:</span><span class="nx">content</span><span class="p">},</span>
+        <span class="kd">function</span><span class="p">(</span><span class="nx">data</span><span class="p">){</span>
+            <span class="nx">data</span> <span class="o">=</span> <span class="nx">$</span><span class="p">.</span><span class="nx">parseJSON</span><span class="p">(</span><span class="nx">data</span><span class="p">);</span>
+            <span class="c1">//提示框显示返回消息</span>
+            <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#hintBody</span><span class="dl">"</span><span class="p">).</span><span class="nx">text</span><span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">msg</span><span class="p">);</span>
+            <span class="c1">//显示提示框/两秒后自动隐藏</span>
+            <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#hintModal</span><span class="dl">"</span><span class="p">).</span><span class="nx">modal</span><span class="p">(</span><span class="dl">"</span><span class="s2">show</span><span class="dl">"</span><span class="p">);</span>
+            <span class="nx">setTimeout</span><span class="p">(</span><span class="kd">function</span><span class="p">(){</span>
+                <span class="nx">$</span><span class="p">(</span><span class="dl">"</span><span class="s2">#hintModal</span><span class="dl">"</span><span class="p">).</span><span class="nx">modal</span><span class="p">(</span><span class="dl">"</span><span class="s2">hide</span><span class="dl">"</span><span class="p">);</span>
+                <span class="k">if</span><span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">code</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">reload</span><span class="p">();</span>
+                <span class="p">}</span>
+            <span class="p">},</span> <span class="mi">2000</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h3 id="3kakfa的log报错">3.Kakfa的log报错</h3>
+
+<p>windows端的Bug，每次只能手动删除Log文件然后重启</p>
+
+<h3 id="4redis无法连接">4.redis无法连接</h3>
+
+<blockquote>
+  <p><a href="https://stackoverflow.com/questions/42857551/could-not-connect-to-redis-at-127-0-0-16379-connection-refused-with-homebrew">Could not connect to Redis at 127.0.0.1:6379: </a></p>
+</blockquote>
+
+<p>解决办法：需要先启动redis-server</p>
+
+<h3 id="5无法访问云服务器的头像">5.无法访问云服务器的头像</h3>
+
+<p>因为拼路径时，忘记在前面添加http://，导致模板会默认的把当前路径加在前面。localhost:15213XXXXXXXXXX真正的路径</p>
+
+<h3 id="6插入30w个数据mysql无法显示数量">6.插入30W个数据Mysql无法显示数量</h3>
+
+<p>要过一段时间数据才能更新。。</p>
+
+<h3 id="7查询首页帖子报错">7.查询首页帖子报错</h3>
+
+<p>原因，对DiscusspostServer.class初始化函数忘记加上@PostConstruct注解，导致Caffeine缓存无法初始化。</p>
+
+</article>
+      </div>
+    </main>
+
+    
+  </body>
+</html>
