@@ -1,5 +1,781 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.8.7">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2021-02-19T14:16:37+08:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">tie’s blog</title><subtitle>好好吃饭好好睡觉
-</subtitle><author><name>zhangtie</name></author><entry><title type="html">CSAPP笔记：系统IO</title><link href="http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html" rel="alternate" type="text/html" title="CSAPP笔记：系统IO" /><published>2020-04-23T08:43:00+08:00</published><updated>2020-04-23T08:43:00+08:00</updated><id>http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7IO</id><content type="html" xml:base="http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html">&lt;h1 id=&quot;系统级io&quot;&gt;系统级I/O&lt;/h1&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.8.7">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2021-02-19T19:50:31+08:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">tie’s blog</title><subtitle>好好吃饭好好睡觉
+</subtitle><author><name>zhangtie</name></author><entry><title type="html">CSAPP：同步-进阶</title><link href="http://localhost:4000/%E5%90%8C%E6%AD%A5-%E8%BF%9B%E9%98%B6.html" rel="alternate" type="text/html" title="CSAPP：同步-进阶" /><published>2020-06-02T07:23:00+08:00</published><updated>2020-06-02T07:23:00+08:00</updated><id>http://localhost:4000/%E5%90%8C%E6%AD%A5-%E8%BF%9B%E9%98%B6</id><content type="html" xml:base="http://localhost:4000/%E5%90%8C%E6%AD%A5-%E8%BF%9B%E9%98%B6.html">&lt;h1 id=&quot;同步-进阶&quot;&gt;同步-进阶&lt;/h1&gt;
+
+&lt;h2 id=&quot;使用信号量来协调线程&quot;&gt;使用信号量来协调线程&lt;/h2&gt;
+
+&lt;p&gt;基本思想：使用信号量操作函数（P(),V()）来提醒其他线程某些状态的改变。&lt;/p&gt;
+
+&lt;p&gt;两个常见的例子：1，生产者-消费者模型。2，读/写模型&lt;/p&gt;
+
+&lt;h3 id=&quot;生产者-消费者问题&quot;&gt;生产者-消费者问题&lt;/h3&gt;
+
+&lt;h4 id=&quot;基本思想&quot;&gt;基本思想&lt;/h4&gt;
+
+&lt;p&gt;生产者：等待空槽（slot），把资源（Item）插入空槽，并提醒消费者。&lt;/p&gt;
+
+&lt;p&gt;消费者：等待资源，把资源提取出来（slot），产生空槽，并提醒生产者。&lt;/p&gt;
+
+&lt;p&gt;举例：多媒体系统/图形用户接口设计。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDBpd&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDBpd.png&quot; alt=&quot;yhDBpd.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;信号量：需要三个，分别是mutex，保证只能有一个线程在操作buffer。slots：表示当前的空槽位。items：表示当前有多少资源。&lt;/p&gt;
+
+&lt;h4 id=&quot;sbuf-package&quot;&gt;sbuf package&lt;/h4&gt;
+
+&lt;p&gt;使用sbuf来实现此模型。具体实现如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDD1A&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDD1A.png&quot; alt=&quot;yhDD1A.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现sbuf包定义了一个结构体以及4个函数。其中sbuf_t结构体中包含有buffer指针，buffer大小，两个首尾指针，以及三个信号量。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDr6I&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDr6I.png&quot; alt=&quot;yhDr6I.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;初始化过程：动态分配buffer（则可以共享），以及初始化信号量。&lt;/p&gt;
+
+&lt;p&gt;也可以使用deinit来释放动态分配的内存。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhD6nP&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhD6nP.png&quot; alt=&quot;yhD6nP.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;插入和取出资源的过程：需要先等待是否有空槽或者资源，然后插入资源或者取资源时，需要用互斥锁保护起来。&lt;/p&gt;
+
+&lt;p&gt;​&lt;/p&gt;
+
+&lt;h3 id=&quot;读者写者问题&quot;&gt;读者/写者问题&lt;/h3&gt;
+
+&lt;h4 id=&quot;基本思想-1&quot;&gt;基本思想&lt;/h4&gt;
+
+&lt;p&gt;读者线程：只能够读取某个对象。&lt;/p&gt;
+
+&lt;p&gt;写者线程：可以修改某个对象。&lt;/p&gt;
+
+&lt;p&gt;显然写者只能互斥访问对象，但是读者可以无限制的访问对象。&lt;/p&gt;
+
+&lt;p&gt;举例：航线预约系统，多线程web服务器的缓存&lt;/p&gt;
+
+&lt;h4 id=&quot;解决方式&quot;&gt;解决方式&lt;/h4&gt;
+
+&lt;p&gt;读者优先：当读者大于等于1时，我们会锁住写者，此时写者必须等所有读者（包括后来加入的读者）全部完成，才能开始写。&lt;/p&gt;
+
+&lt;p&gt;写者优先：只要写者开始写，则尽可能地执行写操作。&lt;/p&gt;
+
+&lt;p&gt;两者方式都会造成写者或者读者线程的饥饿。&lt;/p&gt;
+
+&lt;p&gt;读者优先程序举例：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDc0f&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDc0f.png&quot; alt=&quot;yhDc0f.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;需要用互斥锁保护readcnt。&lt;/li&gt;
+  &lt;li&gt;一旦读者数量大于1，就把写者锁住，直到读者数量为0，才释放写者锁。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;预线程化并发服务器&quot;&gt;预线程化并发服务器&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDfhQ&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDfhQ.png&quot; alt=&quot;yhDfhQ.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;首先会创建N个预先的线程，然后等待连接，将每一个连接的connfd插入到buffer中。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDRAS&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDRAS.png&quot; alt=&quot;yhDRAS.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;当Buffer中有item也就是connfd时，线程会执行echo，注意线程detached，并且永远不会终止。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDg78&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDg78.png&quot; alt=&quot;yhDg78.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;ehch_cnt程序统计用户发来的所有字节，存储在byte_cnt这个全局变量中，所以需要互斥锁，init_echo_cnt将echo初始化，这可以在主线程中进行，但是如下代码展示了在工作线程中初始化的方法。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDWtg&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDWtg.png&quot; alt=&quot;yhDWtg.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;通过使用static变量，只会被第一个线程初始化一次（老师说不是这样。。），所以Pthread_once只会被调用一次，从而只会初始化一次echo_cnt。&lt;/p&gt;
+
+&lt;h2 id=&quot;线程安全函数&quot;&gt;线程安全函数&lt;/h2&gt;
+
+&lt;h3 id=&quot;基本概念&quot;&gt;基本概念&lt;/h3&gt;
+
+&lt;p&gt;定义：当一个函数被多个并发线程调用，并总能产生正确结果时，则这个函数为线程安全函数。&lt;/p&gt;
+
+&lt;p&gt;四种常见的线程不安全函数：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;没有保护共享变量的函数&lt;/li&gt;
+  &lt;li&gt;保持跨越多个调用的状态的函数&lt;/li&gt;
+  &lt;li&gt;返回指向静态变量指针的函数&lt;/li&gt;
+  &lt;li&gt;调用线程不安全函数的函数&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;线程不安全函数分析&quot;&gt;线程不安全函数分析&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;没有保护共享数据的函数&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;如之前的badcnt.c程序，没有对共享数据cnt进行保护，从而发生了线程交替，造成错误结果。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;保持跨越多个调用的状态的函数&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;典型例子是伪随机数生成函数，其当前调用的返回值，依赖于前一次调用的结果。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;返回指向静态变量的指针的函数&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;很容易理解，因为静态变量的地址不变，此类函数的返回值是固定的，当多个线程调用此类函数，线程1的结果可以覆盖线程2的结果，可以选择重写（我们得有权限访问源代码），或者包装此函数，如下图，由于ctime返回的是静态函数地址，我们使用&lt;strong&gt;加锁-复制&lt;/strong&gt;技术，对线程不安全函数加锁，然后将静态函数地址和我们的私有内存地址练习起来，这样就能保护此线程得到的地址不会被其它线程覆盖。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhD4pj&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhD4pj.png&quot; alt=&quot;yhD4pj.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;调用了线程不安全函数的函数&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;修改其调用函数，确保此函数的调用函数都是安全的。&lt;/p&gt;
+
+&lt;h3 id=&quot;可重入函数reentrant-function&quot;&gt;可重入函数（reentrant function）&lt;/h3&gt;
+
+&lt;p&gt;定义：当函数被多线程调用，没有任何共享数据时，则此函数是可重入的。&lt;/p&gt;
+
+&lt;p&gt;可重入函数和线程安全函数的关系如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhD51s&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhD51s.png&quot; alt=&quot;yhD51s.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;注意：所有C标准库中的函数，都是线程安全的！大部分unix的system call也是线程安全的。&lt;/p&gt;
+
+&lt;h3 id=&quot;竞争&quot;&gt;竞争&lt;/h3&gt;
+
+&lt;p&gt;当程序运行的正确性，取决于一个线程必须在另一线程到达y点前，到达x点，则称存在竞争。&lt;/p&gt;
+
+&lt;p&gt;如下图，由于所有线程都共享数据i，而数据i为了能提供正确的id给线程i，则必须不能在解引用前，被增加1.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDIcn&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDIcn.png&quot; alt=&quot;yhDIcn.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如何消除？给每一个i分配动态空间，这样传入的是ptr，且没有被共享。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDHBV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDHBV.png&quot; alt=&quot;yhDHBV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;死锁&quot;&gt;死锁&lt;/h3&gt;
+
+&lt;p&gt;当一个进程（线程）等待一个永远不会发生的条件时，会出现死锁。&lt;/p&gt;
+
+&lt;p&gt;常见例子：&lt;/p&gt;
+
+&lt;p&gt;线程1和线程2都需要A，B资源才能继续进行，线程1先锁定了资源A，接着线程2锁定了资源B，此时两线程都无法继续进行，永远的等待下去。&lt;/p&gt;
+
+&lt;p&gt;下图代码表示两线程对两二元信号量的&lt;strong&gt;锁定顺序&lt;/strong&gt;，导致了死锁。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhD7n0&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhD7n0.png&quot; alt=&quot;yhD7n0.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其线程图如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDoXq&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDoXq.png&quot; alt=&quot;yhDoXq.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;所有进入死锁区域的轨迹都最终会到死锁点。&lt;/p&gt;
+
+&lt;p&gt;简单修改锁定顺序，就可以防止上述代码的死锁现象。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhDLAU&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhDLAU.png&quot; alt=&quot;yhDLAU.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">同步-进阶 使用信号量来协调线程 基本思想：使用信号量操作函数（P(),V()）来提醒其他线程某些状态的改变。 两个常见的例子：1，生产者-消费者模型。2，读/写模型 生产者-消费者问题 基本思想 生产者：等待空槽（slot），把资源（Item）插入空槽，并提醒消费者。 消费者：等待资源，把资源提取出来（slot），产生空槽，并提醒生产者。 举例：多媒体系统/图形用户接口设计。 信号量：需要三个，分别是mutex，保证只能有一个线程在操作buffer。slots：表示当前的空槽位。items：表示当前有多少资源。 sbuf package 使用sbuf来实现此模型。具体实现如下所示： 可以发现sbuf包定义了一个结构体以及4个函数。其中sbuf_t结构体中包含有buffer指针，buffer大小，两个首尾指针，以及三个信号量。 初始化过程：动态分配buffer（则可以共享），以及初始化信号量。 也可以使用deinit来释放动态分配的内存。 插入和取出资源的过程：需要先等待是否有空槽或者资源，然后插入资源或者取资源时，需要用互斥锁保护起来。 ​ 读者/写者问题 基本思想 读者线程：只能够读取某个对象。 写者线程：可以修改某个对象。 显然写者只能互斥访问对象，但是读者可以无限制的访问对象。 举例：航线预约系统，多线程web服务器的缓存 解决方式 读者优先：当读者大于等于1时，我们会锁住写者，此时写者必须等所有读者（包括后来加入的读者）全部完成，才能开始写。 写者优先：只要写者开始写，则尽可能地执行写操作。 两者方式都会造成写者或者读者线程的饥饿。 读者优先程序举例： 可以发现： 需要用互斥锁保护readcnt。 一旦读者数量大于1，就把写者锁住，直到读者数量为0，才释放写者锁。 预线程化并发服务器 首先会创建N个预先的线程，然后等待连接，将每一个连接的connfd插入到buffer中。 当Buffer中有item也就是connfd时，线程会执行echo，注意线程detached，并且永远不会终止。 ehch_cnt程序统计用户发来的所有字节，存储在byte_cnt这个全局变量中，所以需要互斥锁，init_echo_cnt将echo初始化，这可以在主线程中进行，但是如下代码展示了在工作线程中初始化的方法。 通过使用static变量，只会被第一个线程初始化一次（老师说不是这样。。），所以Pthread_once只会被调用一次，从而只会初始化一次echo_cnt。 线程安全函数 基本概念 定义：当一个函数被多个并发线程调用，并总能产生正确结果时，则这个函数为线程安全函数。 四种常见的线程不安全函数： 没有保护共享变量的函数 保持跨越多个调用的状态的函数 返回指向静态变量指针的函数 调用线程不安全函数的函数 线程不安全函数分析 没有保护共享数据的函数 如之前的badcnt.c程序，没有对共享数据cnt进行保护，从而发生了线程交替，造成错误结果。 保持跨越多个调用的状态的函数 典型例子是伪随机数生成函数，其当前调用的返回值，依赖于前一次调用的结果。 返回指向静态变量的指针的函数 很容易理解，因为静态变量的地址不变，此类函数的返回值是固定的，当多个线程调用此类函数，线程1的结果可以覆盖线程2的结果，可以选择重写（我们得有权限访问源代码），或者包装此函数，如下图，由于ctime返回的是静态函数地址，我们使用加锁-复制技术，对线程不安全函数加锁，然后将静态函数地址和我们的私有内存地址练习起来，这样就能保护此线程得到的地址不会被其它线程覆盖。 调用了线程不安全函数的函数 修改其调用函数，确保此函数的调用函数都是安全的。 可重入函数（reentrant function） 定义：当函数被多线程调用，没有任何共享数据时，则此函数是可重入的。 可重入函数和线程安全函数的关系如下所示： 注意：所有C标准库中的函数，都是线程安全的！大部分unix的system call也是线程安全的。 竞争 当程序运行的正确性，取决于一个线程必须在另一线程到达y点前，到达x点，则称存在竞争。 如下图，由于所有线程都共享数据i，而数据i为了能提供正确的id给线程i，则必须不能在解引用前，被增加1. 如何消除？给每一个i分配动态空间，这样传入的是ptr，且没有被共享。 死锁 当一个进程（线程）等待一个永远不会发生的条件时，会出现死锁。 常见例子： 线程1和线程2都需要A，B资源才能继续进行，线程1先锁定了资源A，接着线程2锁定了资源B，此时两线程都无法继续进行，永远的等待下去。 下图代码表示两线程对两二元信号量的锁定顺序，导致了死锁。 其线程图如下： 所有进入死锁区域的轨迹都最终会到死锁点。 简单修改锁定顺序，就可以防止上述代码的死锁现象。</summary></entry><entry><title type="html">CSAPP：同步-基础</title><link href="http://localhost:4000/%E5%90%8C%E6%AD%A5-%E5%9F%BA%E7%A1%80.html" rel="alternate" type="text/html" title="CSAPP：同步-基础" /><published>2020-05-23T07:51:00+08:00</published><updated>2020-05-23T07:51:00+08:00</updated><id>http://localhost:4000/%E5%90%8C%E6%AD%A5-%E5%9F%BA%E7%A1%80</id><content type="html" xml:base="http://localhost:4000/%E5%90%8C%E6%AD%A5-%E5%9F%BA%E7%A1%80.html">&lt;h1 id=&quot;同步-基础&quot;&gt;同步-基础&lt;/h1&gt;
+
+&lt;h2 id=&quot;线程中的共享数据&quot;&gt;线程中的共享数据&lt;/h2&gt;
+
+&lt;p&gt;如何判断数据被多线程共享呢？并不是全局变量就是共享的，线程栈内的变量是私有的。需要具体分析。&lt;/p&gt;
+
+&lt;p&gt;共享数据定义：如果多个线程都对某个变量X的实例有引用，则称这个变量是共享变量。&lt;/p&gt;
+
+&lt;p&gt;从以下三个方面来理解共享变量。&lt;/p&gt;
+
+&lt;h3 id=&quot;线程内存模型&quot;&gt;线程内存模型&lt;/h3&gt;
+
+&lt;p&gt;理论上多线程在一个进程内运行，每个线程都有自己的stack,线程ID等，都共享code,heap等。&lt;/p&gt;
+
+&lt;p&gt;但实际操作中，除了寄存器中的数据是严格的私有和保护起来的，线程中栈内的数据是可以被其他线程读写的。&lt;/p&gt;
+
+&lt;p&gt;如下图所示：传入线程的全局指针ptr指向的是主线程中的栈内局部变量msgs，此时peer线程可以通过此全局指针去访问主线程栈内数据。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhBgJJ&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhBgJJ.png&quot; alt=&quot;yhBgJJ.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;变量映射到内存&quot;&gt;变量映射到内存&lt;/h3&gt;
+
+&lt;p&gt;包括：全局变量，本地自动变量，本地静态变量。&lt;/p&gt;
+
+&lt;p&gt;全局变量：定义在函数体之外，运行时只含有一个实例，放在data区域，每个线程都可以引用。&lt;/p&gt;
+
+&lt;p&gt;本地自动变量：每一个线程都有自己的栈来存储所有的本地自动变量实例，就算是他们执行的是相同的线程实例。&lt;/p&gt;
+
+&lt;p&gt;本地静态变量：定义在函数体内，也只包含有一个实例，只能在函数体内使用，不同线程都使用这个函数时，进行数据共享（都可以读写这个唯一的实例）。&lt;/p&gt;
+
+&lt;h3 id=&quot;分析共享变量&quot;&gt;分析共享变量&lt;/h3&gt;
+
+&lt;p&gt;分析下面代码中，哪些代码是线程私有，哪些代码是共享的。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhBRzR&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhBRzR.png&quot; alt=&quot;yhBRzR.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：ptr和static变量只有一个实例，但是thread routine被两个线程使用，里面的局部自动变量每个线程栈都有一份实例。&lt;/p&gt;
+
+&lt;p&gt;共享变量：ptr,msgs,cnt。&lt;/p&gt;
+
+&lt;h2 id=&quot;共享数据引起的同步问题&quot;&gt;共享数据引起的同步问题&lt;/h2&gt;
+
+&lt;h3 id=&quot;错误代码分析&quot;&gt;错误代码分析&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhB2W9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhB2W9.png&quot; alt=&quot;yhB2W9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：nither虽然是主线程的局部变量，但是因为不会被修改，所以可以引用传递。&lt;/p&gt;
+
+&lt;p&gt;cnt是volatile的，也会是不回被存在寄存器中，每次操作都要在内存中取出和存回去。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhBci4&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhBci4.png&quot; alt=&quot;yhBci4.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现，cnt++,需要进行三个步骤，但是由于线程交替，可能会出现以下错误：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhB0s0&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhB0s0.png&quot; alt=&quot;yhB0s0.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：线程1在Load cnt并加一后，还没来得及存储，cnt被线程2load,此时cnt为0，最后线程1和线程2都是在0的基础上加1，cnt被写了两次1。&lt;/p&gt;
+
+&lt;h3 id=&quot;进度图&quot;&gt;进度图&lt;/h3&gt;
+
+&lt;p&gt;利用进度图，在n维笛卡尔坐标系中画出轨迹线，来表示多线程指令的执行顺序。如下图为双线程的进度图，图中有不安全区域，轨迹进入此区域，会发生错误。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhBrZT&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhBrZT.png&quot; alt=&quot;yhBrZT.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;L1,U1,S1等涉及对共享变量cnt的操作，两线程不能对其同时操作，构成不安全区域。&lt;/p&gt;
+
+&lt;p&gt;如果一条路径线没有经过不安全区域，则说明是安全的。&lt;/p&gt;
+
+&lt;h2 id=&quot;使用信号量解决同步问题&quot;&gt;使用信号量解决同步问题&lt;/h2&gt;
+
+&lt;p&gt;为了确保不产生不安全的路径线，可以使用信号量。&lt;/p&gt;
+
+&lt;h3 id=&quot;定义&quot;&gt;定义&lt;/h3&gt;
+
+&lt;p&gt;信号量：非负整数，全局变量，由P(s),V(s)操作。&lt;/p&gt;
+
+&lt;p&gt;P(s)：如果s非零，则减少1并立即返回（system call）（原子性），立即进行当前线程的下一条指令。&lt;/p&gt;
+
+&lt;p&gt;如果s为零，则暂停当前线程，知道某一线程执行了V(s)，使得s变成非零，此时当前线程p(s)重启，将s减少1，返回被暂停的线程继续操作。&lt;/p&gt;
+
+&lt;p&gt;V(s)：s加1，如果有悬停的线程，则通过某种算法，选择一条悬停线程重启。&lt;/p&gt;
+
+&lt;p&gt;所有信号量总是大于等于1的。&lt;/p&gt;
+
+&lt;h3 id=&quot;接口&quot;&gt;接口&lt;/h3&gt;
+
+&lt;p&gt;包括init：设置信号量，wait()：减少信号量，post()：增加信号量。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhBBLV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhBBLV.png&quot; alt=&quot;yhBBLV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;互斥&quot;&gt;互斥&lt;/h3&gt;
+
+&lt;p&gt;使用二元信号量（互斥锁）（mutex)，调用P(mutex)：锁定。V(mutex)：解锁。&lt;/p&gt;
+
+&lt;p&gt;引入信号锁，对cnt进行锁定，从而只能有一个线程操作cnt，不回被打断。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhBsdU&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhBsdU.png&quot; alt=&quot;yhBsdU.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;会比较慢，因为一直system call。&lt;/p&gt;
+
+&lt;p&gt;进度图变成如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhByoF&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhByoF.png&quot; alt=&quot;yhByoF.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现由于信号量不能是-1，线程路径不会经过不安全区域，从而保证了路径的安全。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">同步-基础 线程中的共享数据 如何判断数据被多线程共享呢？并不是全局变量就是共享的，线程栈内的变量是私有的。需要具体分析。 共享数据定义：如果多个线程都对某个变量X的实例有引用，则称这个变量是共享变量。 从以下三个方面来理解共享变量。 线程内存模型 理论上多线程在一个进程内运行，每个线程都有自己的stack,线程ID等，都共享code,heap等。 但实际操作中，除了寄存器中的数据是严格的私有和保护起来的，线程中栈内的数据是可以被其他线程读写的。 如下图所示：传入线程的全局指针ptr指向的是主线程中的栈内局部变量msgs，此时peer线程可以通过此全局指针去访问主线程栈内数据。 变量映射到内存 包括：全局变量，本地自动变量，本地静态变量。 全局变量：定义在函数体之外，运行时只含有一个实例，放在data区域，每个线程都可以引用。 本地自动变量：每一个线程都有自己的栈来存储所有的本地自动变量实例，就算是他们执行的是相同的线程实例。 本地静态变量：定义在函数体内，也只包含有一个实例，只能在函数体内使用，不同线程都使用这个函数时，进行数据共享（都可以读写这个唯一的实例）。 分析共享变量 分析下面代码中，哪些代码是线程私有，哪些代码是共享的。 可以发现：ptr和static变量只有一个实例，但是thread routine被两个线程使用，里面的局部自动变量每个线程栈都有一份实例。 共享变量：ptr,msgs,cnt。 共享数据引起的同步问题 错误代码分析 可以发现：nither虽然是主线程的局部变量，但是因为不会被修改，所以可以引用传递。 cnt是volatile的，也会是不回被存在寄存器中，每次操作都要在内存中取出和存回去。 可以发现，cnt++,需要进行三个步骤，但是由于线程交替，可能会出现以下错误： 其中：线程1在Load cnt并加一后，还没来得及存储，cnt被线程2load,此时cnt为0，最后线程1和线程2都是在0的基础上加1，cnt被写了两次1。 进度图 利用进度图，在n维笛卡尔坐标系中画出轨迹线，来表示多线程指令的执行顺序。如下图为双线程的进度图，图中有不安全区域，轨迹进入此区域，会发生错误。 L1,U1,S1等涉及对共享变量cnt的操作，两线程不能对其同时操作，构成不安全区域。 如果一条路径线没有经过不安全区域，则说明是安全的。 使用信号量解决同步问题 为了确保不产生不安全的路径线，可以使用信号量。 定义 信号量：非负整数，全局变量，由P(s),V(s)操作。 P(s)：如果s非零，则减少1并立即返回（system call）（原子性），立即进行当前线程的下一条指令。 如果s为零，则暂停当前线程，知道某一线程执行了V(s)，使得s变成非零，此时当前线程p(s)重启，将s减少1，返回被暂停的线程继续操作。 V(s)：s加1，如果有悬停的线程，则通过某种算法，选择一条悬停线程重启。 所有信号量总是大于等于1的。 接口 包括init：设置信号量，wait()：减少信号量，post()：增加信号量。 互斥 使用二元信号量（互斥锁）（mutex)，调用P(mutex)：锁定。V(mutex)：解锁。 引入信号锁，对cnt进行锁定，从而只能有一个线程操作cnt，不回被打断。 会比较慢，因为一直system call。 进度图变成如下： 可以发现由于信号量不能是-1，线程路径不会经过不安全区域，从而保证了路径的安全。</summary></entry><entry><title type="html">CSAPP：并发编程</title><link href="http://localhost:4000/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B.html" rel="alternate" type="text/html" title="CSAPP：并发编程" /><published>2020-05-14T08:51:00+08:00</published><updated>2020-05-14T08:51:00+08:00</updated><id>http://localhost:4000/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B</id><content type="html" xml:base="http://localhost:4000/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B.html">&lt;h1 id=&quot;并发编程&quot;&gt;并发编程&lt;/h1&gt;
+
+&lt;h2 id=&quot;引言&quot;&gt;引言&lt;/h2&gt;
+
+&lt;h3 id=&quot;并发编程常见问题&quot;&gt;并发编程常见问题&lt;/h3&gt;
+
+&lt;p&gt;并发编程容易引发错误，包括竞争，死锁，饥饿等。&lt;/p&gt;
+
+&lt;h3 id=&quot;迭代iterative服务器&quot;&gt;迭代（iterative)服务器&lt;/h3&gt;
+
+&lt;p&gt;一次只能处理一个用户的请求&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhB92R&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhB92R.png&quot; alt=&quot;yhB92R.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：用户2真正进入等待，是在call read指令，此时用户无法得到server的数据。&lt;/p&gt;
+
+&lt;p&gt;用户2发出connect指令，虽然并没有建立连接，server的TCP管理程序会把连接请求入队。同理，用户2向server发出数据（write），尽管没有建立连接，TCP管理程序会先把数据填入缓存，但是在进行read时，由于server不能向用户发送数据，会进入等待。&lt;/p&gt;
+
+&lt;p&gt;迭代式服务器的缺点：当某一用户不能断开连接后，其他用户会永远等待。&lt;/p&gt;
+
+&lt;h2 id=&quot;并发服务器&quot;&gt;并发服务器&lt;/h2&gt;
+
+&lt;p&gt;常见的实现方法有以下三种：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;基于进程：内核自动控制不同逻辑流的交替，每个逻辑流都有自己的地址空间&lt;/li&gt;
+  &lt;li&gt;基于事件：程序员手动控制逻辑流的交替，每个逻辑流共享相同的地址空间&lt;/li&gt;
+  &lt;li&gt;基于线程：内核自动控制不同逻辑流的交替，每个逻辑流共享相同的地址空间，相同于事件+进程的混合。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;基于线程的并发服务器&quot;&gt;基于线程的并发服务器&lt;/h3&gt;
+
+&lt;h4 id=&quot;实现方式&quot;&gt;实现方式&lt;/h4&gt;
+
+&lt;p&gt;为每一个用户都生成一个子进程，如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhBpG9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhBpG9.png&quot; alt=&quot;yhBpG9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;代码&quot;&gt;代码&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yhBSPJ&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yhBSPJ.png&quot; alt=&quot;yhBSPJ.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;1，需要关闭两次connfd，因为子进程会完全复制父进程的文件引用表&lt;/p&gt;
+
+&lt;p&gt;2，子进程需要关闭listenfd，因为子进程一般不需要监听嵌套字。&lt;/p&gt;
+
+&lt;p&gt;3，监听服务器需要回收所有的子进程，防止内存泄漏（memory leak）&lt;/p&gt;
+
+&lt;h4 id=&quot;优缺点&quot;&gt;优缺点&lt;/h4&gt;
+
+&lt;p&gt;优点：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;能够并发处理连接&lt;/li&gt;
+  &lt;li&gt;只会共享“文件表”，具有干净的共享模型（共享的东西很少）&lt;/li&gt;
+  &lt;li&gt;简单直观&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;缺点：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;进程控制开销&lt;/li&gt;
+  &lt;li&gt;进程间共享数据比较麻烦（管道？）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;基于事件的并发服务器&quot;&gt;基于事件的并发服务器&lt;/h3&gt;
+
+&lt;h4 id=&quot;实现方式-1&quot;&gt;实现方式&lt;/h4&gt;
+
+&lt;p&gt;服务器能够维护一个connfd数组，并能够判断其中有哪些connfd有待定的输入（pending input）（使用select,epoll函数）（待定输入的到达被视为&lt;strong&gt;事件&lt;/strong&gt;）。&lt;/p&gt;
+
+&lt;p&gt;如果listenfd监听到了input，则接受连接，并添加进connfd数组。服务器能够为所有的connfd提供服务。&lt;/p&gt;
+
+&lt;h4 id=&quot;优缺点-1&quot;&gt;优缺点&lt;/h4&gt;
+
+&lt;p&gt;优点：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;只有一个逻辑流，一个地址空间&lt;/li&gt;
+  &lt;li&gt;调试方便（单步调试）&lt;/li&gt;
+  &lt;li&gt;没有进程/线程的开销&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;缺点：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;代码相对于进程/线程并发服务器，复杂很多（需要选择算法？）&lt;/li&gt;
+  &lt;li&gt;很难提供&lt;strong&gt;细粒度并发&lt;/strong&gt;。&lt;/li&gt;
+  &lt;li&gt;多核系统无法发挥优势。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;基于线程的并发服务器-1&quot;&gt;基于线程的并发服务器&lt;/h3&gt;
+
+&lt;h4 id=&quot;什么是线程&quot;&gt;什么是线程&lt;/h4&gt;
+
+&lt;p&gt;进程可以看成是：进程的上下文+代码/数据+栈。其中，进程上下文可以分为线程上下文+内核上下文。不同上下文（context）如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yh0x54&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yh0x54.png&quot; alt=&quot;yh0x54.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;注意线程包括了&lt;strong&gt;线程上下文&lt;/strong&gt;（寄存器数据，条件代码，栈指针，程序计数器）+&lt;strong&gt;栈&lt;/strong&gt;，而一个进程可以存在多个线程，线程有以下特点：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;线程有自己的逻辑控制流&lt;/li&gt;
+  &lt;li&gt;线程共享代码/数据/内核上下文/地址空间&lt;/li&gt;
+  &lt;li&gt;线程有自己的栈，用于存储局部变量（但是heap中的数据是共享的）&lt;/li&gt;
+  &lt;li&gt;每个线程都要线程ID（TID）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;一个进程的多个线程构成了&lt;strong&gt;线程池&lt;/strong&gt;，而不像进程是由层次结构的。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yh0jVU&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yh0jVU.png&quot; alt=&quot;yh0jVU.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;判断并发线程也和进程类似：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yh072n&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yh072n.png&quot; alt=&quot;yh072n.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;进程线程比较&quot;&gt;进程/线程比较&lt;/h4&gt;
+
+&lt;p&gt;相似性：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;都有自己的逻辑控制流&lt;/li&gt;
+  &lt;li&gt;都能够和其他进程/线程并发。&lt;/li&gt;
+  &lt;li&gt;都需要进行上下文转换&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;不同：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;线程共享代码和数据（除了各自的stack）&lt;/li&gt;
+  &lt;li&gt;创建线程的开销更小（需要两倍的时间）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;线程实例&quot;&gt;线程实例&lt;/h4&gt;
+
+&lt;p&gt;Posix线程：C语言操作线程的标准接口，定义了60多个函数。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yh0ObT&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yh0ObT.png&quot; alt=&quot;yh0ObT.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Pthread_creat()：创建线程，执行线程routine（定义好了的函数），返回线程ID&lt;/p&gt;
+
+&lt;p&gt;Pthread_join()：回收线程，得到线程routine的返回值。&lt;/p&gt;
+
+&lt;p&gt;在线程的routine内打印hello,world.&lt;/p&gt;
+
+&lt;h4 id=&quot;基于线程的并发服务器代码&quot;&gt;基于线程的并发服务器代码&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yh0LrV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yh0LrV.png&quot; alt=&quot;yh0LrV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;必须得为每一次连接产生的connfd动态分配地址（不能放在stack），因为主线程和子线程的执行顺序不确定，放主线程先于子线程执行，会再次创建新的connfd，如果没有使用malloc，第一个子线程得到的connfd会被新的连接覆盖。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yh0qK0&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yh0qK0.png&quot; alt=&quot;yh0qK0.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;需要对传入的connfd解引用。&lt;/li&gt;
+  &lt;li&gt;detach：线程的状态分为joinable和detached，其中joinable表示此线程能够被其他线程控制（回收和杀死），detached表示此线程独立于其他线程运行，并由内核自动回收。默认状态是joinable，一般我们进行线程并发时，需要设置为detached。&lt;/li&gt;
+  &lt;li&gt;只需要closefd一次，因为线程共享文件表。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;优缺点-2&quot;&gt;优缺点&lt;/h4&gt;
+
+&lt;p&gt;优点：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;线程间很容易进行数据共享&lt;/li&gt;
+  &lt;li&gt;比进程效率更高&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;缺点&lt;/p&gt;
+
+&lt;p&gt;共享数据具有双面性，不经意的共享数据，会造成很难察觉，很难重现(随机性)的bug!!因为很难判断哪个数据是私有的，哪个数据是共享的。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">并发编程 引言 并发编程常见问题 并发编程容易引发错误，包括竞争，死锁，饥饿等。 迭代（iterative)服务器 一次只能处理一个用户的请求 可以发现：用户2真正进入等待，是在call read指令，此时用户无法得到server的数据。 用户2发出connect指令，虽然并没有建立连接，server的TCP管理程序会把连接请求入队。同理，用户2向server发出数据（write），尽管没有建立连接，TCP管理程序会先把数据填入缓存，但是在进行read时，由于server不能向用户发送数据，会进入等待。 迭代式服务器的缺点：当某一用户不能断开连接后，其他用户会永远等待。 并发服务器 常见的实现方法有以下三种： 基于进程：内核自动控制不同逻辑流的交替，每个逻辑流都有自己的地址空间 基于事件：程序员手动控制逻辑流的交替，每个逻辑流共享相同的地址空间 基于线程：内核自动控制不同逻辑流的交替，每个逻辑流共享相同的地址空间，相同于事件+进程的混合。 基于线程的并发服务器 实现方式 为每一个用户都生成一个子进程，如下所示： 代码 1，需要关闭两次connfd，因为子进程会完全复制父进程的文件引用表 2，子进程需要关闭listenfd，因为子进程一般不需要监听嵌套字。 3，监听服务器需要回收所有的子进程，防止内存泄漏（memory leak） 优缺点 优点： 能够并发处理连接 只会共享“文件表”，具有干净的共享模型（共享的东西很少） 简单直观 缺点： 进程控制开销 进程间共享数据比较麻烦（管道？） 基于事件的并发服务器 实现方式 服务器能够维护一个connfd数组，并能够判断其中有哪些connfd有待定的输入（pending input）（使用select,epoll函数）（待定输入的到达被视为事件）。 如果listenfd监听到了input，则接受连接，并添加进connfd数组。服务器能够为所有的connfd提供服务。 优缺点 优点： 只有一个逻辑流，一个地址空间 调试方便（单步调试） 没有进程/线程的开销 缺点： 代码相对于进程/线程并发服务器，复杂很多（需要选择算法？） 很难提供细粒度并发。 多核系统无法发挥优势。 基于线程的并发服务器 什么是线程 进程可以看成是：进程的上下文+代码/数据+栈。其中，进程上下文可以分为线程上下文+内核上下文。不同上下文（context）如下： 注意线程包括了线程上下文（寄存器数据，条件代码，栈指针，程序计数器）+栈，而一个进程可以存在多个线程，线程有以下特点： 线程有自己的逻辑控制流 线程共享代码/数据/内核上下文/地址空间 线程有自己的栈，用于存储局部变量（但是heap中的数据是共享的） 每个线程都要线程ID（TID） 一个进程的多个线程构成了线程池，而不像进程是由层次结构的。 判断并发线程也和进程类似： 进程/线程比较 相似性： 都有自己的逻辑控制流 都能够和其他进程/线程并发。 都需要进行上下文转换 不同： 线程共享代码和数据（除了各自的stack） 创建线程的开销更小（需要两倍的时间） 线程实例 Posix线程：C语言操作线程的标准接口，定义了60多个函数。 Pthread_creat()：创建线程，执行线程routine（定义好了的函数），返回线程ID Pthread_join()：回收线程，得到线程routine的返回值。 在线程的routine内打印hello,world. 基于线程的并发服务器代码 必须得为每一次连接产生的connfd动态分配地址（不能放在stack），因为主线程和子线程的执行顺序不确定，放主线程先于子线程执行，会再次创建新的connfd，如果没有使用malloc，第一个子线程得到的connfd会被新的连接覆盖。 需要对传入的connfd解引用。 detach：线程的状态分为joinable和detached，其中joinable表示此线程能够被其他线程控制（回收和杀死），detached表示此线程独立于其他线程运行，并由内核自动回收。默认状态是joinable，一般我们进行线程并发时，需要设置为detached。 只需要closefd一次，因为线程共享文件表。 优缺点 优点： 线程间很容易进行数据共享 比进程效率更高 缺点 共享数据具有双面性，不经意的共享数据，会造成很难察觉，很难重现(随机性)的bug!!因为很难判断哪个数据是私有的，哪个数据是共享的。</summary></entry><entry><title type="html">CSAPP：网络编程</title><link href="http://localhost:4000/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B.html" rel="alternate" type="text/html" title="CSAPP：网络编程" /><published>2020-05-02T08:43:00+08:00</published><updated>2020-05-02T08:43:00+08:00</updated><id>http://localhost:4000/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B</id><content type="html" xml:base="http://localhost:4000/%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B.html">&lt;h1 id=&quot;网络编程&quot;&gt;网络编程&lt;/h1&gt;
+
+&lt;h3 id=&quot;前提&quot;&gt;前提&lt;/h3&gt;
+
+&lt;p&gt;重点讲编程，网络的数据如何传输，路由器，集线器，以太网，局域网等等知识，看“计算机网络”即可。&lt;/p&gt;
+
+&lt;p&gt;一些图：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftJRf&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftJRf.png&quot; alt=&quot;yftJRf.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftYz8&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftYz8.png&quot; alt=&quot;yftYz8.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;协议&quot;&gt;协议&lt;/h3&gt;
+
+&lt;p&gt;由于存在着不同的LANs和不同的WANs，数据应该怎样在不同的设备上传输呢？&lt;/p&gt;
+
+&lt;p&gt;解决办法：每一台主机或者路由器上，都有一层协议软件，能够帮助不同主机和路由器之间进行数据传输（比如一致的命名方式，唯一标识主机），还能够消除不同网络的差异（不同网络可能采取不同的数据封装方式，协议提供统一的封装格式，帮助网络间的通信）总的来说，协议做了两件事：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;提供了命名机制&lt;/li&gt;
+  &lt;li&gt;提供了传输机制（标准传输单元：包）（包包括：头部/有效部位）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;strong&gt;数据通过封装在网络中传输&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftNQS&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftNQS.png&quot; alt=&quot;yftNQS.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;注意：路由器会对发来的数据报（包）进行重新封装（添加了FH2）&lt;/p&gt;
+
+&lt;h3 id=&quot;因特网&quot;&gt;因特网&lt;/h3&gt;
+
+&lt;p&gt;基于TCP/IP协议族：&lt;/p&gt;
+
+&lt;p&gt;其中IP提供了基本的命名机制以及提供&lt;strong&gt;不可靠的主机-主机间&lt;/strong&gt;的数据报（包）传输。&lt;/p&gt;
+
+&lt;p&gt;UDP：使用IP来提供&lt;strong&gt;不可靠的进程-进程间&lt;/strong&gt;的通讯&lt;/p&gt;
+
+&lt;p&gt;TCP：使用IP来提供可靠的比特流，进程-进程间，通过连接。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;英特网应用程序&lt;/strong&gt;：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yft1II&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yft1II.png&quot; alt=&quot;yft1II.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;在程序员眼中，一个主机和一个IP地址对应，IP地址和域名对应（如www.google.com对应着特定的IP地址）不同主机的进程可以通过连接（connection）进行通信。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;IP地址&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;32位，存储在IP address struct，并且是大端序列。&lt;/p&gt;
+
+&lt;p&gt;32位的IP地址还可以用点分割的十进制表示，两点之间的数为一个字节（最大255）&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;域名&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;域名有多个等级，并由DNS（域名系统）管理，DNS能够维护IP地址和域名的对应，是一个很大的分散数据库。&lt;/p&gt;
+
+&lt;p&gt;在程序员严重，DNS就是有着很多主机项（host entries）的数据库，每条主机项对应着域名和IP地址的映射。&lt;/p&gt;
+
+&lt;p&gt;使用nslookup可以查询主机项。比如：nslookup localhost可以得到路由器的回环地址（loopback address）&lt;/p&gt;
+
+&lt;p&gt;nslookup hostname：获得本机真实域名 nslookup www.google.com获得谷歌的IP地址（可以发现多次查询会不同）&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;因特网连接&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;用户和服务器通过连接进行通信，连接的特点：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;点对点：连接着一对进程&lt;/li&gt;
+  &lt;li&gt;完全双向：能够在同时双向传递数据&lt;/li&gt;
+  &lt;li&gt;可靠&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;socket：连接的终端：&lt;strong&gt;一个socket由IP地址加上接口(port)组成。&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;接口(port)：16位（两个字节），用来表示进程，常见的接口有：随机接口（用户端的内核把随机接口自动的分配给进程）。著名接口：与常见的一些服务进程相关（如port 80：表示网页服务）&lt;/p&gt;
+
+&lt;p&gt;常见接口：echo server：7/echo，ssh server :22/ssh，email server：25/smtp，Web servers：80/http&lt;/p&gt;
+
+&lt;p&gt;可以在/etc/services中查询这些常见接口（Linux）。&lt;/p&gt;
+
+&lt;p&gt;什么是连接：一条连接和一组socket对一一对应（socket pair），如下图表示了两条不同的连接：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftldA&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftldA.png&quot; alt=&quot;yftldA.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;socket&quot;&gt;Socket&lt;/h3&gt;
+
+&lt;h4 id=&quot;定义&quot;&gt;定义&lt;/h4&gt;
+
+&lt;p&gt;socket对于内核来说，是“连接”的端点。对于应用程序来说，是&lt;strong&gt;文件描述符&lt;/strong&gt;，也就是说应用程序可以通过socket进行数据读写。socketI/O和普通文件I/O的区别在于：其打开方式不同&lt;/p&gt;
+
+&lt;p&gt;用户和服务器通过socket描述符进行通信，如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftQZd&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftQZd.png&quot; alt=&quot;yftQZd.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;socketI/O和普通文件I/O的区别在于：其&lt;strong&gt;打开方式&lt;/strong&gt;不同&lt;/p&gt;
+
+&lt;h4 id=&quot;socket地址结构&quot;&gt;Socket地址结构&lt;/h4&gt;
+
+&lt;p&gt;普通Socket地址结构，如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftKqH&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftKqH.png&quot; alt=&quot;yftKqH.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;因特网特定socket地址结构：（可以看成socket的子类，但是C没有子类的概念。。）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftZRK&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftZRK.png&quot; alt=&quot;yftZRK.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;socket接口重点&quot;&gt;Socket接口（重点）&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftFaR&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftFaR.png&quot; alt=&quot;yftFaR.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;值得注意的地方：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;第一步是要先打开server的listenfd，之后再打开client的clientfd。&lt;/li&gt;
+  &lt;li&gt;连接是connect和accept的连接&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;strong&gt;常用函数和数据结构&lt;/strong&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;getaddrinfo&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;用于将“主机名/接口/服务”等转换为socket（套接字）地址结构，返回的地址结构被result指针指向。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yft9r4&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yft9r4.png&quot; alt=&quot;yft9r4.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;返回的result指针指向的是一个socket地址结构的链表&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftpMF&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftpMF.png&quot; alt=&quot;yftpMF.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;addrinfo&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;socket地址结构，包含有用于socket函数和connect/bind函数的参数。&lt;/p&gt;
+
+&lt;p&gt;举例：hostinfo.c：用于得到输入的网址的ip地址：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYzxU&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYzxU.png&quot; alt=&quot;yfYzxU.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYx2T&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYx2T.png&quot; alt=&quot;yfYx2T.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;socket()&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;作用：得到socket描述符&lt;/p&gt;
+
+&lt;p&gt;格式：int socket(int domain, int type, int protocol)&lt;/p&gt;
+
+&lt;p&gt;注意：由于创建的socket与协议相关，最好的方式是使用getaddrinfo来自动生成所需参数。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;bind()&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;作用：将服务器的socket地址和之前得到的socket描述符关联起来。&lt;/p&gt;
+
+&lt;p&gt;格式：int bind(int sockfd, SA *addr, socklen_t addrlen)；&lt;/p&gt;
+
+&lt;p&gt;注意：使用getaddrinfo来得到地址和地址长度。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;listen()&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;作用：将active socket转换为listening socket。&lt;/p&gt;
+
+&lt;p&gt;因为默认情况，内核会认为从socket函数得到的描述符是用户端的，是激活状态的socket。&lt;/p&gt;
+
+&lt;p&gt;通过listen()函数，server可以告诉内核，这个描述符是服务器端的。把active socket转换成listening socket。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;accpet()&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;作用：等待与用户连接，连接成功返回连接描述符&lt;/p&gt;
+
+&lt;p&gt;服务器通过调用accept()函数，可以等待连接，参数是：listenfd,用户的socket地址和长度。返回值是&lt;strong&gt;连接描述符&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;注意：为什么要多出一个连接描述符呢，因为连接描述符是用户和服务器建立连接后的断点，而监听描述符仅仅是用来接受用户的连接请求。通过创建多个连接描述符，服务器可以同时和多个客户建立连接（比如可以每次收到连接请求后，fork新进程来与用户建立连接）&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;connect()&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;作用：用户调用，与传入地址所在的服务器进行连接&lt;/p&gt;
+
+&lt;p&gt;格式：int conncet(int clientfd, SA *addr, socklen_t addrlen)&lt;/p&gt;
+
+&lt;p&gt;注意：最好使用getaddrinfo函数来获得地址参数。&lt;/p&gt;
+
+&lt;h4 id=&quot;socket应用举例helper&quot;&gt;socket应用举例（helper）&lt;/h4&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;open_listenfd&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;返回clientfd并与server的hostname和port建立连接&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfY48f&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfY48f.png&quot; alt=&quot;yfY48f.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如上所示为client和server建立连接的过程：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;初始化Hint，然后根据hostname和port得到储存着地址信息的list&lt;/li&gt;
+  &lt;li&gt;测试list中的信息，看看是否能建立连接（先socket再connet）&lt;/li&gt;
+  &lt;li&gt;如果p没有到链表末尾，则说明成功建立连接，返回clientfd&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;注意：socket（）函数仅仅是返回一个client的文件描述符，并没有与服务器建立连接。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;open_listenfd&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;使当前的server所用port处于监听状态，返回listenfd。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yftCqJ&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yftCqJ.png&quot; alt=&quot;yftCqJ.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;echo-clientserver&quot;&gt;Echo client/server&lt;/h3&gt;
+
+&lt;h4 id=&quot;echo-client&quot;&gt;Echo Client&lt;/h4&gt;
+
+&lt;p&gt;代码如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYjP0&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYjP0.png&quot; alt=&quot;yfYjP0.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：使用open_clinetfd与服务器建立连接，使用RIO处理输入输出，从而提高效率，使用writen来&lt;strong&gt;发送&lt;/strong&gt;数据，使用readlineb来&lt;strong&gt;读取&lt;/strong&gt;数据。&lt;/p&gt;
+
+&lt;h4 id=&quot;echo-server&quot;&gt;Echo Server&lt;/h4&gt;
+
+&lt;p&gt;代码如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYvGV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYvGV.png&quot; alt=&quot;yfYvGV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：使用accept获得client的地址，以及connfd。使用getnameinfo可以获得client的主机名和地址，使用echo来读取发送来的字符串长度，并将发送来的数据&lt;strong&gt;回送&lt;/strong&gt;到client&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYqVs&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYqVs.png&quot; alt=&quot;yfYqVs.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;telnet&quot;&gt;telnet&lt;/h4&gt;
+
+&lt;p&gt;使用telnet程序可以向服务器传输字符串&lt;/p&gt;
+
+&lt;p&gt;linux&amp;gt; telnet &lt;host&gt;&lt;portnumber&gt;&lt;/portnumber&gt;&lt;/host&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;web-server&quot;&gt;Web server&lt;/h3&gt;
+
+&lt;h4 id=&quot;基础&quot;&gt;基础&lt;/h4&gt;
+
+&lt;p&gt;用户端（浏览器）和网页服务器使用http协议传输数据，传输过程如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYHbj&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYHbj.png&quot; alt=&quot;yfYHbj.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;web-content&quot;&gt;Web content&lt;/h4&gt;
+
+&lt;p&gt;web content为MIME格式的字节串，常见的requested content如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfY7rQ&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfY7rQ.png&quot; alt=&quot;yfY7rQ.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;网页内容分为静态和动态两种，静态内容为一些文件，图像等等，动态内容则需要用户端传入参数，服务器用参数运行用户指定的程序，将结果返回给用户端，但总的来说，网页内容就是服务器管理或产生的一个文件。&lt;/p&gt;
+
+&lt;p&gt;URLs：universal resource locater。如http://www.cmu.edu:80/index.html。&lt;/p&gt;
+
+&lt;h4 id=&quot;http-request&quot;&gt;HTTP request&lt;/h4&gt;
+
+&lt;p&gt;格式如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYTKg&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYTKg.png&quot; alt=&quot;yfYTKg.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;http-response&quot;&gt;HTTP response&lt;/h4&gt;
+
+&lt;p&gt;格式如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYIxS&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYIxS.png&quot; alt=&quot;yfYIxS.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;tiny-web-server&quot;&gt;Tiny Web Server&lt;/h4&gt;
+
+&lt;p&gt;非常简单的服务器，能够返回静态内容和动态内容，只有239行C代码。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;静态内容代码如下：&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYRUI&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYRUI.png&quot; alt=&quot;yfYRUI.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;响应动态内容过程如下：&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;如果客户端发送的URI包含了字符串”/cgi-bin”，则说明请求的是动态内容&lt;/li&gt;
+  &lt;li&gt;服务器f&lt;strong&gt;ork()子进程&lt;/strong&gt;，并在子进程中处理URI。&lt;/li&gt;
+  &lt;li&gt;子进程运行代码并产生动态内容，服务器返回子进程产生的结构&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;cgi及动态内容产生过程举例&quot;&gt;CGI及动态内容产生过程举例&lt;/h4&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;CGI&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;CGI程序简单的定义了浏览器/服务器/子进程的数据传输标准，但CGI只是以前服务器产生动态内容的标准，现在被许多其他新的技术取代了。（fastCGI/Apache modules等等）&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;动态内容产生详解&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;1，浏览器怎么把参数传给服务器？&lt;/p&gt;
+
+&lt;p&gt;答：在URI后面添加参数，参数由‘？’开始，用‘&amp;amp;’分割。&lt;/p&gt;
+
+&lt;p&gt;2，服务器怎么把参数传给子进程呢？&lt;/p&gt;
+
+&lt;p&gt;答：首先URI后面接的参数放在了环境变量 QUERY_STRING中，提出出来即可。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfY2VA&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfY2VA.png&quot; alt=&quot;yfY2VA.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;3，服务器怎么获得子程序产生的动态结果？&lt;/p&gt;
+
+&lt;p&gt;答：输出重定向，用dup2&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYhPP&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYhPP.png&quot; alt=&quot;yfYhPP.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfYW5t&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfYW5t.png&quot; alt=&quot;yfYW5t.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;注意：sprintf把内容输入到content上，而不是输入到fd上（因为stdout重定向到了fd）&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">网络编程 前提 重点讲编程，网络的数据如何传输，路由器，集线器，以太网，局域网等等知识，看“计算机网络”即可。 一些图： 协议 由于存在着不同的LANs和不同的WANs，数据应该怎样在不同的设备上传输呢？ 解决办法：每一台主机或者路由器上，都有一层协议软件，能够帮助不同主机和路由器之间进行数据传输（比如一致的命名方式，唯一标识主机），还能够消除不同网络的差异（不同网络可能采取不同的数据封装方式，协议提供统一的封装格式，帮助网络间的通信）总的来说，协议做了两件事： 提供了命名机制 提供了传输机制（标准传输单元：包）（包包括：头部/有效部位） 数据通过封装在网络中传输 注意：路由器会对发来的数据报（包）进行重新封装（添加了FH2） 因特网 基于TCP/IP协议族： 其中IP提供了基本的命名机制以及提供不可靠的主机-主机间的数据报（包）传输。 UDP：使用IP来提供不可靠的进程-进程间的通讯 TCP：使用IP来提供可靠的比特流，进程-进程间，通过连接。 英特网应用程序： 在程序员眼中，一个主机和一个IP地址对应，IP地址和域名对应（如www.google.com对应着特定的IP地址）不同主机的进程可以通过连接（connection）进行通信。 IP地址 32位，存储在IP address struct，并且是大端序列。 32位的IP地址还可以用点分割的十进制表示，两点之间的数为一个字节（最大255） 域名 域名有多个等级，并由DNS（域名系统）管理，DNS能够维护IP地址和域名的对应，是一个很大的分散数据库。 在程序员严重，DNS就是有着很多主机项（host entries）的数据库，每条主机项对应着域名和IP地址的映射。 使用nslookup可以查询主机项。比如：nslookup localhost可以得到路由器的回环地址（loopback address） nslookup hostname：获得本机真实域名 nslookup www.google.com获得谷歌的IP地址（可以发现多次查询会不同） 因特网连接 用户和服务器通过连接进行通信，连接的特点： 点对点：连接着一对进程 完全双向：能够在同时双向传递数据 可靠 socket：连接的终端：一个socket由IP地址加上接口(port)组成。 接口(port)：16位（两个字节），用来表示进程，常见的接口有：随机接口（用户端的内核把随机接口自动的分配给进程）。著名接口：与常见的一些服务进程相关（如port 80：表示网页服务） 常见接口：echo server：7/echo，ssh server :22/ssh，email server：25/smtp，Web servers：80/http 可以在/etc/services中查询这些常见接口（Linux）。 什么是连接：一条连接和一组socket对一一对应（socket pair），如下图表示了两条不同的连接： Socket 定义 socket对于内核来说，是“连接”的端点。对于应用程序来说，是文件描述符，也就是说应用程序可以通过socket进行数据读写。socketI/O和普通文件I/O的区别在于：其打开方式不同 用户和服务器通过socket描述符进行通信，如下所示： socketI/O和普通文件I/O的区别在于：其打开方式不同 Socket地址结构 普通Socket地址结构，如下： 因特网特定socket地址结构：（可以看成socket的子类，但是C没有子类的概念。。） Socket接口（重点） 值得注意的地方： 第一步是要先打开server的listenfd，之后再打开client的clientfd。 连接是connect和accept的连接 常用函数和数据结构 getaddrinfo 用于将“主机名/接口/服务”等转换为socket（套接字）地址结构，返回的地址结构被result指针指向。 返回的result指针指向的是一个socket地址结构的链表 addrinfo socket地址结构，包含有用于socket函数和connect/bind函数的参数。 举例：hostinfo.c：用于得到输入的网址的ip地址： socket() 作用：得到socket描述符 格式：int socket(int domain, int type, int protocol) 注意：由于创建的socket与协议相关，最好的方式是使用getaddrinfo来自动生成所需参数。 bind() 作用：将服务器的socket地址和之前得到的socket描述符关联起来。 格式：int bind(int sockfd, SA *addr, socklen_t addrlen)； 注意：使用getaddrinfo来得到地址和地址长度。 listen() 作用：将active socket转换为listening socket。 因为默认情况，内核会认为从socket函数得到的描述符是用户端的，是激活状态的socket。 通过listen()函数，server可以告诉内核，这个描述符是服务器端的。把active socket转换成listening socket。 accpet() 作用：等待与用户连接，连接成功返回连接描述符 服务器通过调用accept()函数，可以等待连接，参数是：listenfd,用户的socket地址和长度。返回值是连接描述符 注意：为什么要多出一个连接描述符呢，因为连接描述符是用户和服务器建立连接后的断点，而监听描述符仅仅是用来接受用户的连接请求。通过创建多个连接描述符，服务器可以同时和多个客户建立连接（比如可以每次收到连接请求后，fork新进程来与用户建立连接） connect() 作用：用户调用，与传入地址所在的服务器进行连接 格式：int conncet(int clientfd, SA *addr, socklen_t addrlen) 注意：最好使用getaddrinfo函数来获得地址参数。 socket应用举例（helper） open_listenfd 返回clientfd并与server的hostname和port建立连接 如上所示为client和server建立连接的过程： 初始化Hint，然后根据hostname和port得到储存着地址信息的list 测试list中的信息，看看是否能建立连接（先socket再connet） 如果p没有到链表末尾，则说明成功建立连接，返回clientfd 注意：socket（）函数仅仅是返回一个client的文件描述符，并没有与服务器建立连接。 open_listenfd 使当前的server所用port处于监听状态，返回listenfd。 Echo client/server Echo Client 代码如下： 其中：使用open_clinetfd与服务器建立连接，使用RIO处理输入输出，从而提高效率，使用writen来发送数据，使用readlineb来读取数据。 Echo Server 代码如下： 其中：使用accept获得client的地址，以及connfd。使用getnameinfo可以获得client的主机名和地址，使用echo来读取发送来的字符串长度，并将发送来的数据回送到client telnet 使用telnet程序可以向服务器传输字符串 linux&amp;gt; telnet Web server 基础 用户端（浏览器）和网页服务器使用http协议传输数据，传输过程如下： Web content web content为MIME格式的字节串，常见的requested content如下： 网页内容分为静态和动态两种，静态内容为一些文件，图像等等，动态内容则需要用户端传入参数，服务器用参数运行用户指定的程序，将结果返回给用户端，但总的来说，网页内容就是服务器管理或产生的一个文件。 URLs：universal resource locater。如http://www.cmu.edu:80/index.html。 HTTP request 格式如下： HTTP response 格式如下： Tiny Web Server 非常简单的服务器，能够返回静态内容和动态内容，只有239行C代码。 静态内容代码如下： 响应动态内容过程如下： 如果客户端发送的URI包含了字符串”/cgi-bin”，则说明请求的是动态内容 服务器fork()子进程，并在子进程中处理URI。 子进程运行代码并产生动态内容，服务器返回子进程产生的结构 CGI及动态内容产生过程举例 CGI CGI程序简单的定义了浏览器/服务器/子进程的数据传输标准，但CGI只是以前服务器产生动态内容的标准，现在被许多其他新的技术取代了。（fastCGI/Apache modules等等） 动态内容产生详解 1，浏览器怎么把参数传给服务器？ 答：在URI后面添加参数，参数由‘？’开始，用‘&amp;amp;’分割。 2，服务器怎么把参数传给子进程呢？ 答：首先URI后面接的参数放在了环境变量 QUERY_STRING中，提出出来即可。 3，服务器怎么获得子程序产生的动态结果？ 答：输出重定向，用dup2 注意：sprintf把内容输入到content上，而不是输入到fd上（因为stdout重定向到了fd）</summary></entry><entry><title type="html">CSAPP笔记：系统IO</title><link href="http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html" rel="alternate" type="text/html" title="CSAPP笔记：系统IO" /><published>2020-04-23T08:43:00+08:00</published><updated>2020-04-23T08:43:00+08:00</updated><id>http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7IO</id><content type="html" xml:base="http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html">&lt;h1 id=&quot;系统级io&quot;&gt;系统级I/O&lt;/h1&gt;
 
 &lt;h2 id=&quot;unix-io&quot;&gt;Unix I/O&lt;/h2&gt;
 
@@ -1248,387 +2024,4 @@
 
 &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QfFs&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QfFs.png&quot; alt=&quot;y6QfFs.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
 
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Q4Wq&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Q4Wq.png&quot; alt=&quot;y6Q4Wq.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">链接 链接详解 静态链接例子 对于两个.c文件，如何形成可执行的目标文件呢？ 两个源代码分别经过预处理编译器，编译编译器，汇编编译器，生成了两个可重定向的目标文件，再经过链接器，链接成可执行目标文件。(在编译过程中需要指定两个.c文件) 链接器优势 模块化：程序是由许多小的源文件组成，而不是大的单一文件。并且能构建包含许多函数的库。 提高效率：节省时间：当修改源文件时，只需要重新编译那个修改的源文件，而不需要重新编译其他源文件。节省空间：公用的函数压缩成库，函数调用库时，只需要加载库中的某一些函数。 链接器的工作步骤 符号解析（简单解析） 程序能够定义和引用符号（全局变量或者函数） 这些符号（全局变量/函数）的定义在目标文件（.o)中以符号表的形式保存着，每一个符号对应着名称，大小，符号位置（以structs形式） 在符号解析阶段，链接器将每一个符号引用和其定义（名称，大小，符号位置）一一对应。 重定位阶段 目的是将分开储存的数据和代码组合成单一区域 重定位：由符号的相对位置，找到其绝对位置 更新符号引用中的位置为它们的绝对位置？？ 一些定义 三种目标文件（object files）（模块） 重定向目标文件（.o file）（汇编器生成的二进制文件）：不能直接加载当内存，需要等待链接器的链接，其中数据和代码以某种形式存储（ELF），每一个.o文件对应着一个源文件。 可运行目标文件（a.out file）能够直接加载到内存并运行 共享目标文件（.so file）（共享库）：特殊的重定向目标文件，能够在加载时间？？和运行时期动态的载入内存和动态链接，在windows中称为dll文件。 可执行可链接格式（ELF） 针对二进制目标文件（上面三种）的标准格式，所以上面三种文件又称为ELF二进制。 这种二进制文件的格式如下图所示：每一部分都有详细划分。 .bss文件储存未初始化的全局变量。 链接器符号/链接步骤 链接器符号 全局符号（global symbols)：在模块m中定义，并能被其他模块引用的符号，比如non-static 函数或者non-static 全局变量 外部符号（external symbols）：在模块m中被引用，在其他模块被定义的全局符号 局部符号（local symbols）：在模块m中定义，只能在模块m中引用的符号，比如static的函数和全局变量。 区分局部非静态变量和局部静态变量：local non-static存在stack上，local static存在.bss或者.data 强符号/或符号：强符号：过程/已经初始化的全局变量，弱符号：未初始化的全局变量，不允许多个同名强变量，但允许多个同名弱变量，会随机选择一个初始化。一定要避免弱变量，很容易出Bug 全局符号使用原则：尽可能static，尽可能初始化，尽可能声明external 链接步骤 符号解析：确定目标文件中的符号表 重定向 可以发现：重定向需要重新规划各个重定向目标文件的.text./data section的地址，从而组成可执行目标文件的.text和.data 可以发现：对于那些需要定位地址的部分，如array的地址和sum函数的地址，都用00000000代替，然后使用了relocation entry，这些entries可以帮助linker有足够的信息，组成可执行的目标文件（详细解释见教材，视频也没怎么讲） 可以发现：之前array和sum的地址确定了！（之前好像用的相对地址）然后main函数好像就是紧接在system code的后面。 这张图的困惑：1，为什么要多开8个字节的stack呢，明明callee个caller使用寄存器来共享数据呀 2，程序计数器（rpi）的相对地址是什么东西。 最后，可执行文件被加载到内存，如下图所示 上图针对linux系统，程序开始地址0x400000，有一段内存映射区域供共享库使用。 链接库 如何方便的使用那些常用的函数呢：方法1：把常用函数用单一的源文件存储，这样在linker会把一个很大的.o文件链接进去，时间空间成本高。方法2：把常用函数分别用源文件存储，程序员在编译时手动显式的链接要使用的.o文件，这样效率高，但增加程序员负担。 解决办法：把常用的函数打包形成链接库，在main.c文件中包含这些链接库，liner可以在链接库中找到所需的函数的.o文件，链接需要的.o文件 链接库按照链接的时间不同：分为静态链接库和动态链接库。 静态链接库 所有相关的.o文件重新排位后压缩到一个.a（archive file/档案文件）（AR：归档器）中，当liner发现了无法解析的符号时，会在一个或多个.o文件中查找，找到所需要的文件 可以发现：归档器（archiver)允许更新文件以及重新编译替换文件 可以发现：对象文件按字符串排列索引 链接过程：在所需要的归档文件中选择所需函数链接即可(.h文件存储了所需要的函数声明，然后链接器按照声明在归档文件中找到所需函数)（.h文件在cpp过程中被放在主代码部分形成.i文件，其实里面内容就是些全局对象的声明） 链接如下图所示： 编译指令如下： 可以发现：按照linker执行“解析符号”的顺序，不能把.a(即图中的-lmine)文件放在前面，不然无法解析.o文件中的符号。 静态链接库缺点：1，需要不断地复制libc中的函数，如果你的system libraries中有Bug，所有使用了该库的文件都需要重新显式relink。 动态链接库 定义：.o文件可以在应用程序（加载到内存或）执行的时候动态的加载和链接进去。 加载时间（load-time）链接：Linux通常情况下加载应用程序会使用此动态加载的方法。 运行时间（run-time）链接：可以在程序运行期间，自由选择任何时间link所需的.o文件，通过使用dlopen()接口 总结 链接可以发生在：程序编译完成（静态链接库），程序被加载到内存（动态链接库），程序运行时（动态链接库） 库打桩技术 可以在complie time/ link-time/ Run-time三个阶段进行库打桩，前两个略，重点是动态链接库的库打桩技术 首先定义我们自己的mymalloc.c文件，然后生成.so文件，照常编译和链接main.o，但是在运行的时候加入一行命令行，让链接器首先在mymalloc.so这个共享库内解析符号，从而实现了我们自定义的的wraper函数，代替了系统自带的malloc函数。这样我们能够统计malloc地址等等。</summary></entry><entry><title type="html">CSAPP笔记：高速缓存</title><link href="http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98.html" rel="alternate" type="text/html" title="CSAPP笔记：高速缓存" /><published>2020-03-18T14:16:00+08:00</published><updated>2020-03-18T14:16:00+08:00</updated><id>http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98</id><content type="html" xml:base="http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98.html">&lt;h1 id=&quot;高速缓存&quot;&gt;高速缓存&lt;/h1&gt;
-
-&lt;p&gt;性质：体积小速度快的SRAM组成，完全由硬件控制，集成在CPU芯片内，储存着经常被访问的来自主存（main memory）的块（blocks）。&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MR8x&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MR8x.png&quot; alt=&quot;y6MR8x.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;结构：S,E,B，其中s表示有多少个sets，e表示每个set有多少Line，b表示每个block中需偏移几个字节才能找到目标bytes。总容量是S * E * B&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MW26&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MW26.png&quot; alt=&quot;y6MW26.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;如何在缓存中读取目标字节&quot;&gt;如何在缓存中读取目标字节：&lt;/h3&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M6a9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M6a9.png&quot; alt=&quot;y6M6a9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;先确定在哪个set，然后根据tag确定在哪个Line，然后根据block offset确定字节位置。&lt;/p&gt;
-
-&lt;h3 id=&quot;直接映射缓存e--1&quot;&gt;直接映射缓存（E = 1)&lt;/h3&gt;
-
-&lt;p&gt;定义：每个set只有一行，当tag和当前set中的block.tag不复合（或者valid位为0），miss，此set.block被替换。&lt;/p&gt;
-
-&lt;p&gt;模拟：通过以下模拟可以发现当只有一行时，有相同set index的block会经常发生替换。（注意此处主存大小M是16字节怎么计算而来）&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M2P1&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M2P1.png&quot; alt=&quot;y6M2P1.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;h3 id=&quot;e向关联缓存&quot;&gt;E向关联缓存&lt;/h3&gt;
-
-&lt;p&gt;定义：每一行set有多列（E&amp;gt;1),此时CPU会通过复杂的硬件，比较同一个set不同块的tag值，从而找到目标的block，目前能实现的最大E为16。&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;block的大小是一个平衡值，太大则无法储存多个block，太小则可能会经常替换block。&lt;/p&gt;
-
-  &lt;p&gt;如何知道一次是读4个字节还是两个字节呢？老师好像也不懂，应该由CPU根据类型是可以控制每次读的字节数字&lt;/p&gt;
-
-  &lt;p&gt;最常见的替换策略是:LRU，最少被使用的块现被替换掉&lt;/p&gt;
-
-  &lt;p&gt;read操作发生Miss，每次都是在发生Miss的快被替换&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Mc5R&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Mc5R.png&quot; alt=&quot;y6Mc5R.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;可以发现，同样的M,和缓存大小及地址值，但是t和s发生改变。&lt;/p&gt;
-
-&lt;h3 id=&quot;如何进行缓存写操作&quot;&gt;如何进行缓存写操作：&lt;/h3&gt;
-
-&lt;p&gt;1,缓存命中所写block：两种策略&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;直接写入（write-through）：修改缓存block，并直接更新memory&lt;/li&gt;
-  &lt;li&gt;回写（write back)：先修改缓存block，然后这个block被替换时，判断dirty bit（修改位），然后将修改后的block传给memory&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;2，缓存未命中所写block：两种策略&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;写-分配(write-allocate)：先把要修改的block加载到缓存在修改&lt;/li&gt;
-  &lt;li&gt;写-不分配(No- write-allocate)：直接在memory中修改数据&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;一般使用的是：Write-back + Write-allocate&lt;/p&gt;
-
-&lt;h3 id=&quot;缓存层次结构&quot;&gt;缓存层次结构&lt;/h3&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MfxK&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MfxK.png&quot; alt=&quot;y6MfxK.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;缓存性能测试：&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;未命中率：一般非常低，比如L1级为3-10%，L2级不到1%&lt;/li&gt;
-  &lt;li&gt;命中时间：4-10 clock cycles&lt;/li&gt;
-  &lt;li&gt;未命中损失：50-200&lt;/li&gt;
-  &lt;li&gt;未命中损失很大，通常99%和97%命中率，性能差2倍&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;编写缓存友好的代码&quot;&gt;编写缓存友好的代码&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;让最常用的命令（内循环）能够快速访问&lt;/li&gt;
-  &lt;li&gt;需要1，在内循环中，把经常用的数据定义成局部变量，因为局部变量一般放在寄存器中。2，每次循环跨距为1，也可以提高局部性，从而增加命中率。比如跨距为1比跨距为2的命中率大2倍。&lt;/li&gt;
-  &lt;li&gt;通过对缓存的题解，可以量化我们的局部性。&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;存储器山&quot;&gt;存储器山&lt;/h3&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MTVH&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MTVH.png&quot; alt=&quot;y6MTVH.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;吞吐量（Read Throughput）：每秒钟能处理多少数据&lt;/p&gt;
-
-&lt;p&gt;Stride：步长，Size：数据量大小&lt;/p&gt;
-
-&lt;p&gt;可以发现当步长越小，数据量越小，吞吐量越大。&lt;/p&gt;
-
-&lt;h3 id=&quot;改变内层循环的空间局部性&quot;&gt;改变内层循环的空间局部性&lt;/h3&gt;
-
-&lt;p&gt;背景：对N*N的矩阵做内积，一共需要N^3次操作，具体代码如下：&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M4KO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M4KO.png&quot; alt=&quot;y6M4KO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;一共有三层循环（ijk)，最内层循环需要访问矩阵A和矩阵B，其访问方式如下所示：&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M5rD&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M5rD.png&quot; alt=&quot;y6M5rD.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;假设一个block只能存放四个double，则每一次循环，A的miss率为四分之一，而B的Miss率为百分之百，一共为1.25&lt;/p&gt;
-
-&lt;p&gt;当改变内层循环的数据访问方式，提高空间局部性，如下所示：&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MIqe&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MIqe.png&quot; alt=&quot;y6MIqe.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;此时(kij)，miss rate降低，虽然此时在内层循环会增加write操作，（上面ijk的sum存在寄存器，不考虑write），但是通常来说，&lt;strong&gt;write操作对性能的影响更小&lt;/strong&gt;，因为write操作是可以延后处理的。&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M7ad&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M7ad.png&quot; alt=&quot;y6M7ad.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;可以看到改变循环顺序，性能会发生很大的变化。&lt;/p&gt;
-
-&lt;h3 id=&quot;使用分块技术提高时间局部性&quot;&gt;使用分块技术提高时间局部性&lt;/h3&gt;
-
-&lt;p&gt;大致思路为，将程序中的数据结构组织成大的片（chunk），并能使一个片再加到L1，能够在这个片中进行所有的读写，完成后扔掉这个片。&lt;/p&gt;
-
-&lt;p&gt;分块会使程序变得难以理解。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">高速缓存 性质：体积小速度快的SRAM组成，完全由硬件控制，集成在CPU芯片内，储存着经常被访问的来自主存（main memory）的块（blocks）。 结构：S,E,B，其中s表示有多少个sets，e表示每个set有多少Line，b表示每个block中需偏移几个字节才能找到目标bytes。总容量是S * E * B 如何在缓存中读取目标字节： 先确定在哪个set，然后根据tag确定在哪个Line，然后根据block offset确定字节位置。 直接映射缓存（E = 1) 定义：每个set只有一行，当tag和当前set中的block.tag不复合（或者valid位为0），miss，此set.block被替换。 模拟：通过以下模拟可以发现当只有一行时，有相同set index的block会经常发生替换。（注意此处主存大小M是16字节怎么计算而来） E向关联缓存 定义：每一行set有多列（E&amp;gt;1),此时CPU会通过复杂的硬件，比较同一个set不同块的tag值，从而找到目标的block，目前能实现的最大E为16。 block的大小是一个平衡值，太大则无法储存多个block，太小则可能会经常替换block。 如何知道一次是读4个字节还是两个字节呢？老师好像也不懂，应该由CPU根据类型是可以控制每次读的字节数字 最常见的替换策略是:LRU，最少被使用的块现被替换掉 read操作发生Miss，每次都是在发生Miss的快被替换 可以发现，同样的M,和缓存大小及地址值，但是t和s发生改变。 如何进行缓存写操作： 1,缓存命中所写block：两种策略 直接写入（write-through）：修改缓存block，并直接更新memory 回写（write back)：先修改缓存block，然后这个block被替换时，判断dirty bit（修改位），然后将修改后的block传给memory 2，缓存未命中所写block：两种策略 写-分配(write-allocate)：先把要修改的block加载到缓存在修改 写-不分配(No- write-allocate)：直接在memory中修改数据 一般使用的是：Write-back + Write-allocate 缓存层次结构 缓存性能测试： 未命中率：一般非常低，比如L1级为3-10%，L2级不到1% 命中时间：4-10 clock cycles 未命中损失：50-200 未命中损失很大，通常99%和97%命中率，性能差2倍 编写缓存友好的代码 让最常用的命令（内循环）能够快速访问 需要1，在内循环中，把经常用的数据定义成局部变量，因为局部变量一般放在寄存器中。2，每次循环跨距为1，也可以提高局部性，从而增加命中率。比如跨距为1比跨距为2的命中率大2倍。 通过对缓存的题解，可以量化我们的局部性。 存储器山 吞吐量（Read Throughput）：每秒钟能处理多少数据 Stride：步长，Size：数据量大小 可以发现当步长越小，数据量越小，吞吐量越大。 改变内层循环的空间局部性 背景：对N*N的矩阵做内积，一共需要N^3次操作，具体代码如下： 一共有三层循环（ijk)，最内层循环需要访问矩阵A和矩阵B，其访问方式如下所示： 假设一个block只能存放四个double，则每一次循环，A的miss率为四分之一，而B的Miss率为百分之百，一共为1.25 当改变内层循环的数据访问方式，提高空间局部性，如下所示： 此时(kij)，miss rate降低，虽然此时在内层循环会增加write操作，（上面ijk的sum存在寄存器，不考虑write），但是通常来说，write操作对性能的影响更小，因为write操作是可以延后处理的。 可以看到改变循环顺序，性能会发生很大的变化。 使用分块技术提高时间局部性 大致思路为，将程序中的数据结构组织成大的片（chunk），并能使一个片再加到L1，能够在这个片中进行所有的读写，完成后扔掉这个片。 分块会使程序变得难以理解。</summary></entry><entry><title type="html">CSAPP笔记：存储器层次结构</title><link href="http://localhost:4000/%E5%AD%98%E5%82%A8%E5%99%A8%E5%B1%82%E6%AC%A1%E7%BB%93%E6%9E%84.html" rel="alternate" type="text/html" title="CSAPP笔记：存储器层次结构" /><published>2020-03-11T08:03:00+08:00</published><updated>2020-03-11T08:03:00+08:00</updated><id>http://localhost:4000/%E5%AD%98%E5%82%A8%E5%99%A8%E5%B1%82%E6%AC%A1%E7%BB%93%E6%9E%84</id><content type="html" xml:base="http://localhost:4000/%E5%AD%98%E5%82%A8%E5%99%A8%E5%B1%82%E6%AC%A1%E7%BB%93%E6%9E%84.html">&lt;h1 id=&quot;存储器层次结构&quot;&gt;存储器层次结构&lt;/h1&gt;
-
-&lt;h2 id=&quot;存储技术及趋势&quot;&gt;存储技术及趋势&lt;/h2&gt;
-
-&lt;h3 id=&quot;随机存储器ram&quot;&gt;随机存储器（RAM）&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;特点：封装成芯片，多个RAM芯片组成内存，以每个比特为一个单位。&lt;/li&gt;
-  &lt;li&gt;种类：静态RAM（SRAM）和动态存储器（DRAM），其中SRAM的成本高，速度快，只要有电就可以永久保持值，不需刷新，常用作缓存。DRAM的成本低，速度慢，需要经常刷新（充电）.&lt;/li&gt;
-  &lt;li&gt;属于易失性存储器，断电会丢失信息&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;只读存储器rom&quot;&gt;只读存储器（ROM）&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;其实可以写（再编程）很多次，由于历史原因一直被叫做只读存储器&lt;/li&gt;
-  &lt;li&gt;EPROM：可擦写可编程ROM，可以重新编程1000次&lt;/li&gt;
-  &lt;li&gt;闪存：也是非易失性存储器，基于EPROM&lt;/li&gt;
-  &lt;li&gt;SSD：固态硬盘，基于缓存的磁盘驱动器，比传统磁盘更快&lt;/li&gt;
-  &lt;li&gt;固件：（firmware)，存储在ROM上的程序，如BIOS，驱动控制器等&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;总线结构bus-strcture连接cpu和主存&quot;&gt;总线结构（BUS STRCTURE）连接CPU和主存&lt;/h3&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTrl9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTrl9.png&quot; alt=&quot;ysTrl9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;
-    &lt;p&gt;主存读取（read）&lt;/p&gt;
-
-    &lt;p&gt;包括：1，CPU将想要读取数据的地址传给主存。2，主存根据此地址获得所需数据，放在总线上传输3。，CPU从总线上读取数据，放入寄存器。&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;主存存储（write）&lt;/p&gt;
-
-    &lt;p&gt;包括：1，CPU将想要存储的地址传到主存，主存知道了A处地址将要写入数据并等待数据传入。2，CPU将数据放在总线上。3，主存从总线上读取数据，写入到A。&lt;/p&gt;
-  &lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;由此可见，从主存中读取或写入数据都很耗时，大约是用寄存器操作数据的100多倍时间。&lt;/p&gt;
-
-&lt;h3 id=&quot;磁盘&quot;&gt;磁盘&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;几何结构：包括盘片（platters）（双面），磁道（tracks），柱面，扇区（sectors），间隙（gaps)等&lt;/li&gt;
-  &lt;li&gt;容量：取决于记录密度（每个扇区能记录多少数据）和磁道密度。以前每个磁道的扇区数量相同，造成空间浪费，现在将磁盘分成不同的记录区域（recording zone），每个zone的扇区密度和磁道密度都不同。&lt;/li&gt;
-  &lt;li&gt;如何在磁盘上读取数据：磁盘逆时针旋转，通过磁头（读/写头）在不同磁道的表面读写数据&lt;/li&gt;
-  &lt;li&gt;磁盘读取速度：寻道时间+旋转等待时间+数据传输时间，由磁盘旋转速度（7200RPM）寻道速度（最慢）加上平均扇区读写时间&lt;/li&gt;
-  &lt;li&gt;磁盘速度很慢，比SRAM慢40000倍，比DRAM慢2500倍。&lt;/li&gt;
-  &lt;li&gt;对CPU来说，磁盘相当于连续的逻辑单元，将所需的逻辑单元号传给磁盘控制器（disk controller），可确定具体盘面，磁道，扇区在哪。&lt;/li&gt;
-  &lt;li&gt;磁盘的格式容量（可用容量）比最大物理容量小，因为有些柱面预留给损害了的柱面备用。&lt;/li&gt;
-  &lt;li&gt;I/0 总线（bus）：之前的PCI总线是广播总线，在总线上传入一个值，所有设备都能获取到。现代总线称为PCI express总线，点对点传输，速度更快。&lt;/li&gt;
-  &lt;li&gt;CPU读取磁盘过程：1，传入三元信号（指令，逻辑单元号，目标内存地址）给磁盘控制器。2，磁盘控制器读取扇区数据，直接传给主存（DMA）（direct memory access）。3，当DMA完成后，磁盘给CPU一个中断信号，表示已经完成读取。&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h3 id=&quot;ssd&quot;&gt;SSD&lt;/h3&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;在CPU看来和磁盘完全相同，都是连续的逻辑单元。&lt;/li&gt;
-  &lt;li&gt;读取速度比写入速度快，因为写入时，只能整块数据（不是logical blocks）被擦除后再写入。&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTWFO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTWFO.png&quot; alt=&quot;ysTWFO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;在1985-2003年，制造商靠增加时钟频率来提高CPU速度，但是遇到功率瓶颈，发热量过大，在03年后靠增加核心数，提高速度。&lt;/p&gt;
-
-  &lt;p&gt;DRAM/SSD等与CPU的差距越来越大。&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;利用&lt;strong&gt;局部性&lt;/strong&gt;解决CPU/内存间性能差距。&lt;/p&gt;
-
-&lt;h2 id=&quot;局部性&quot;&gt;局部性&lt;/h2&gt;
-
-&lt;p&gt;定义：程序趋向于使用它们最近访问过的地址附近的，数据或指令。&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;两种局部性：时间局部性（某一个指令或数据被访问过后，之后很可能再被访问）空间局部性（可能访问某个指令或数据的周围指令）&lt;/li&gt;
-  &lt;li&gt;学会分辨哪些程序有良好的局部性。（heapsort不具备局部性）&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;缓存在储存结构中的体现&quot;&gt;缓存在储存结构中的体现&lt;/h2&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTcex&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTcex.png&quot; alt=&quot;ysTcex.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;越往顶部，容量越小，速度越快，单字节造价越高&lt;/li&gt;
-  &lt;li&gt;Lk级是Lk+1级的缓存&lt;/li&gt;
-  &lt;li&gt;缓存：使用速度更快，容量更小的存储设备来暂存大容量设备的一部分数据。&lt;/li&gt;
-  &lt;li&gt;设计此存储结构的原因：利用程序的局部性，程序更有可能使用Lk级的数据而不是Lk+1级。&lt;/li&gt;
-  &lt;li&gt;优点：能够以接近底部存储的造价获得空间，并以接近顶部存储设备的速度为程序提供数据。&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTsyR&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTsyR.png&quot; alt=&quot;ysTsyR.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;数据按块的形式（block-sized）的形式利用传输单元在设备间传输。&lt;/li&gt;
-  &lt;li&gt;缓存命中：所需数据刚好在缓存中&lt;/li&gt;
-  &lt;li&gt;缓存不命中：缓存区没有我们所需要的block&lt;/li&gt;
-  &lt;li&gt;缓存不命中的类型：1，cold miss：因为刚开始的时候缓存是没有数据的，所以刚开始一定会出现miss。2，Capacity miss：由于所需的工作Block数量超过了缓存区的容量，造成不命中。3，冲突不命中/conflict miss：由于缓存映射方式（放置算法）的限制，来自Lk+1级的块只能通过算法放在Lk级的某一小块位置，从而造成了某一小块位置不断被置换（或者叫evict/驱逐）。&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTyO1&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTyO1.png&quot; alt=&quot;ysTyO1.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">存储器层次结构 存储技术及趋势 随机存储器（RAM） 特点：封装成芯片，多个RAM芯片组成内存，以每个比特为一个单位。 种类：静态RAM（SRAM）和动态存储器（DRAM），其中SRAM的成本高，速度快，只要有电就可以永久保持值，不需刷新，常用作缓存。DRAM的成本低，速度慢，需要经常刷新（充电）. 属于易失性存储器，断电会丢失信息 只读存储器（ROM） 其实可以写（再编程）很多次，由于历史原因一直被叫做只读存储器 EPROM：可擦写可编程ROM，可以重新编程1000次 闪存：也是非易失性存储器，基于EPROM SSD：固态硬盘，基于缓存的磁盘驱动器，比传统磁盘更快 固件：（firmware)，存储在ROM上的程序，如BIOS，驱动控制器等 总线结构（BUS STRCTURE）连接CPU和主存 主存读取（read） 包括：1，CPU将想要读取数据的地址传给主存。2，主存根据此地址获得所需数据，放在总线上传输3。，CPU从总线上读取数据，放入寄存器。 主存存储（write） 包括：1，CPU将想要存储的地址传到主存，主存知道了A处地址将要写入数据并等待数据传入。2，CPU将数据放在总线上。3，主存从总线上读取数据，写入到A。 由此可见，从主存中读取或写入数据都很耗时，大约是用寄存器操作数据的100多倍时间。 磁盘 几何结构：包括盘片（platters）（双面），磁道（tracks），柱面，扇区（sectors），间隙（gaps)等 容量：取决于记录密度（每个扇区能记录多少数据）和磁道密度。以前每个磁道的扇区数量相同，造成空间浪费，现在将磁盘分成不同的记录区域（recording zone），每个zone的扇区密度和磁道密度都不同。 如何在磁盘上读取数据：磁盘逆时针旋转，通过磁头（读/写头）在不同磁道的表面读写数据 磁盘读取速度：寻道时间+旋转等待时间+数据传输时间，由磁盘旋转速度（7200RPM）寻道速度（最慢）加上平均扇区读写时间 磁盘速度很慢，比SRAM慢40000倍，比DRAM慢2500倍。 对CPU来说，磁盘相当于连续的逻辑单元，将所需的逻辑单元号传给磁盘控制器（disk controller），可确定具体盘面，磁道，扇区在哪。 磁盘的格式容量（可用容量）比最大物理容量小，因为有些柱面预留给损害了的柱面备用。 I/0 总线（bus）：之前的PCI总线是广播总线，在总线上传入一个值，所有设备都能获取到。现代总线称为PCI express总线，点对点传输，速度更快。 CPU读取磁盘过程：1，传入三元信号（指令，逻辑单元号，目标内存地址）给磁盘控制器。2，磁盘控制器读取扇区数据，直接传给主存（DMA）（direct memory access）。3，当DMA完成后，磁盘给CPU一个中断信号，表示已经完成读取。 SSD 在CPU看来和磁盘完全相同，都是连续的逻辑单元。 读取速度比写入速度快，因为写入时，只能整块数据（不是logical blocks）被擦除后再写入。 在1985-2003年，制造商靠增加时钟频率来提高CPU速度，但是遇到功率瓶颈，发热量过大，在03年后靠增加核心数，提高速度。 DRAM/SSD等与CPU的差距越来越大。 利用局部性解决CPU/内存间性能差距。 局部性 定义：程序趋向于使用它们最近访问过的地址附近的，数据或指令。 两种局部性：时间局部性（某一个指令或数据被访问过后，之后很可能再被访问）空间局部性（可能访问某个指令或数据的周围指令） 学会分辨哪些程序有良好的局部性。（heapsort不具备局部性） 缓存在储存结构中的体现 越往顶部，容量越小，速度越快，单字节造价越高 Lk级是Lk+1级的缓存 缓存：使用速度更快，容量更小的存储设备来暂存大容量设备的一部分数据。 设计此存储结构的原因：利用程序的局部性，程序更有可能使用Lk级的数据而不是Lk+1级。 优点：能够以接近底部存储的造价获得空间，并以接近顶部存储设备的速度为程序提供数据。 数据按块的形式（block-sized）的形式利用传输单元在设备间传输。 缓存命中：所需数据刚好在缓存中 缓存不命中：缓存区没有我们所需要的block 缓存不命中的类型：1，cold miss：因为刚开始的时候缓存是没有数据的，所以刚开始一定会出现miss。2，Capacity miss：由于所需的工作Block数量超过了缓存区的容量，造成不命中。3，冲突不命中/conflict miss：由于缓存映射方式（放置算法）的限制，来自Lk+1级的块只能通过算法放在Lk级的某一小块位置，从而造成了某一小块位置不断被置换（或者叫evict/驱逐）。</summary></entry><entry><title type="html">CSAPP笔记：程序优化</title><link href="http://localhost:4000/csapp%E7%AC%94%E8%AE%B0-%E7%A8%8B%E5%BA%8F%E4%BC%98%E5%8C%96.html" rel="alternate" type="text/html" title="CSAPP笔记：程序优化" /><published>2020-03-05T08:00:00+08:00</published><updated>2020-03-05T08:00:00+08:00</updated><id>http://localhost:4000/CSAPP%E7%AC%94%E8%AE%B0:%E7%A8%8B%E5%BA%8F%E4%BC%98%E5%8C%96</id><content type="html" xml:base="http://localhost:4000/csapp%E7%AC%94%E8%AE%B0-%E7%A8%8B%E5%BA%8F%E4%BC%98%E5%8C%96.html">&lt;h1 id=&quot;程序优化常数级别优化&quot;&gt;程序优化（常数级别优化）&lt;/h1&gt;
-&lt;h2 id=&quot;引言&quot;&gt;引言&lt;/h2&gt;
-&lt;ul&gt;
-  &lt;li&gt;不涉及算法优化，有时候常数级别复杂度也可以优化性能&lt;/li&gt;
-  &lt;li&gt;目的：写出编译器友好的代码&lt;/li&gt;
-  &lt;li&gt;可针对通用机器优化，也可以针对特定机型机型优化&lt;/li&gt;
-  &lt;li&gt;使用汇编不一定能使程序变得更快，汇编可以用于一些算力优先的场景&lt;/li&gt;
-  &lt;li&gt;gcc编译器对于大多数情况性能已经足够好&lt;/li&gt;
-  &lt;li&gt;编译器优化的一些限制条件：1,当存疑时，编译器选择不优化。2，一般只在单个procedure中优化（最新版的GCC可以interprocedual，仅限于单个文件）3，编译器只对静态信息优化。&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;编译器常用优化手段&quot;&gt;编译器常用优化手段&lt;/h2&gt;
-&lt;ol&gt;
-  &lt;li&gt;代码移动/代码预先计算：将循环中需要反复重复计算的相同表达式提取到循环外，用局部变量存储，从而减少计算次数&lt;/li&gt;
-  &lt;li&gt;减少计算量：乘法-&amp;gt;加法，乘法-&amp;gt;移位，因为乘法需三个CPU cycles&lt;/li&gt;
-  &lt;li&gt;公用公共子表达式：减少计算量&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;h2 id=&quot;编译器优化阻碍&quot;&gt;编译器优化阻碍&lt;/h2&gt;
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;p&gt;不能对函数调用进行优化（procedure calls）&lt;/p&gt;
-
-    &lt;p&gt;编译器对待procedure就像黑盒子一样&lt;/p&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;void lower(char *s)
-{
-    size_t i;
-    for(i = 0; i &amp;lt; strlen(s)); i++)
-        if(s[i] &amp;gt;= 'A' &amp;amp;&amp;amp; s[i] &amp;lt;= 'Z')
-            s[i] -= ('A' - 'a');
-}
-//可以发现多次对strlen函数进行重复调用，但是GCC不会对此进行优化
-//O(n^2)
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;内存别名（Memory Aliasing）
-&lt;strong&gt;别名&lt;/strong&gt;：两个不同的内存引用，指向同一个地方
-别名的存在，可能会增加&lt;strong&gt;内存访问次数&lt;/strong&gt;（用来保存变量），所以要养成使用局部变量的习惯。&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;h2 id=&quot;探究机器级指令的并发性&quot;&gt;探究机器级指令的并发性&lt;/h2&gt;
-&lt;p&gt;定义如下数据类型和基准计算，尝试优化代码&lt;/p&gt;
-&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/* data strcutre for vectors */&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;strcut&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-    &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-    &lt;span class=&quot;n&quot;&gt;data_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; 
-&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vec&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-
-&lt;span class=&quot;cm&quot;&gt;/* retrieve vector element and store at val */&lt;/span&gt;
-&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;get_vec_element&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vec&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;val&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idx&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-        &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-    &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;val&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
-    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-
-&lt;span class=&quot;cm&quot;&gt;/* Benchmark Compuatation */&lt;/span&gt;
-&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;combinel&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vec_ptr&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-    &lt;span class=&quot;kt&quot;&gt;long&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-    &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dest&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;IDENT&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;vec_length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;){&lt;/span&gt;
-        &lt;span class=&quot;n&quot;&gt;data_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;val&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-        &lt;span class=&quot;n&quot;&gt;get_vec_element&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;val&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
-        &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dest&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dest&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;val&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-&lt;span class=&quot;cm&quot;&gt;/*
-OP/IDENT 都是宏（macros），可以为加法或乘法，
-data_t可以为多种类型如int,long,double等
-*/&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;
-    &lt;p&gt;未优化的写法：如上所示，每次取元素时都要进行边界检测&lt;/p&gt;
-  &lt;/li&gt;
-  &lt;li&gt;
-    &lt;p&gt;基本优化法：只进行一次取元素：取指向vec首元素的指针，然后进行指针运算，即可遍历vec，减少了调用procedures的次数&lt;/p&gt;
-  &lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;现代CPU设计：可以一次性读取多条机器指令（Instruction cache），判断指令间的相关性，对相互间不影响的指令可以同时执行，从而达到一个机器周期能执行多条指令的目的，称为&lt;strong&gt;超标量指令处理器&lt;/strong&gt;（Superscalar processor)&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;流水线型（pipeline)功能单元：乘法操作需要三个机器周期，分成stage1,stage2,stage3，但是在运算stage2时，可以让乘法单元的stage1进行新一轮的乘法操作，这样乘法单元的三个stage能尽可能繁忙，减少运行时间。&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;blockquote&gt;
-  &lt;p&gt;Haswell CPU一共有8个功能单元：包括2个加载单元，一个存储单元，4个整数单元，2个浮点乘，一个浮点加，一个浮点除。&lt;/p&gt;
-
-  &lt;p&gt;每个算数运算所需时间可以由延迟（latency），发射时间（issue time），容量（capacity）描述，其中延迟表示一个计算单元计算一次所需时间，发射时间表示计算单元进行一次新的加载（or发射）需要几个机器周期，容量表示处理该运算的运算单元有几个。&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;循环展开优化法：将循环体内部的单次运算编程可以并行(or pipeline)的多次计算，使得一个机器周期尽可能计算多的计算。&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;//未展开:不能进行pipeline&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
-&lt;span class=&quot;c1&quot;&gt;//2*1展开:也不能pipeline，计算顺序没有变化&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
-&lt;span class=&quot;c1&quot;&gt;//2*1a展开：可以pipeline,运行时间减半&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
-&lt;span class=&quot;c1&quot;&gt;//2*2展开：pipeline，与上面方法类似,two independent streams of operations.&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;x0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x0&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;x1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x1&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;ul&gt;
-  &lt;li&gt;使用向量指令优化：向量指令可以使一次机器循环执行多个操作，基于YMM寄存器（32位/64位），向量化编程主要用在声音，图像处理，视频等浮点数领域。&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;&lt;strong&gt;优化对比：&lt;/strong&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yUgu0f&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/08/yUgu0f.png&quot; alt=&quot;yUgu0f.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;其中Integer的吞吐量因为只有两个加载单元，限制为0.5而不是0.25.&lt;/p&gt;
-
-&lt;h2 id=&quot;避免难以预测的分支判断&quot;&gt;避免难以预测的分支判断&lt;/h2&gt;
-
-&lt;p&gt;现代处理器设计图：&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yUgK78&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/08/yUgK78.png&quot; alt=&quot;yUgK78.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;其中需要对条件分支进行prediction，由于运算出来的寄存器结果都存在register file（寄存器缓存中），每个寄存器可能都缓存了之前几百次计算结果，当prediction出现错误后，需要返回将寄存器都返回到某一状态，从而造成时间浪费。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">程序优化（常数级别优化） 引言 不涉及算法优化，有时候常数级别复杂度也可以优化性能 目的：写出编译器友好的代码 可针对通用机器优化，也可以针对特定机型机型优化 使用汇编不一定能使程序变得更快，汇编可以用于一些算力优先的场景 gcc编译器对于大多数情况性能已经足够好 编译器优化的一些限制条件：1,当存疑时，编译器选择不优化。2，一般只在单个procedure中优化（最新版的GCC可以interprocedual，仅限于单个文件）3，编译器只对静态信息优化。 编译器常用优化手段 代码移动/代码预先计算：将循环中需要反复重复计算的相同表达式提取到循环外，用局部变量存储，从而减少计算次数 减少计算量：乘法-&amp;gt;加法，乘法-&amp;gt;移位，因为乘法需三个CPU cycles 公用公共子表达式：减少计算量 编译器优化阻碍 不能对函数调用进行优化（procedure calls） 编译器对待procedure就像黑盒子一样 void lower(char *s) { size_t i; for(i = 0; i &amp;lt; strlen(s)); i++) if(s[i] &amp;gt;= 'A' &amp;amp;&amp;amp; s[i] &amp;lt;= 'Z') s[i] -= ('A' - 'a'); } //可以发现多次对strlen函数进行重复调用，但是GCC不会对此进行优化 //O(n^2) 内存别名（Memory Aliasing） 别名：两个不同的内存引用，指向同一个地方 别名的存在，可能会增加内存访问次数（用来保存变量），所以要养成使用局部变量的习惯。 探究机器级指令的并发性 定义如下数据类型和基准计算，尝试优化代码 /* data strcutre for vectors */ typedef strcut{ size_t len; data_t *data; }vec; /* retrieve vector element and store at val */ int get_vec_element(*vec v, size_t idx, data_t *val) { if(idx &amp;gt;= v-&amp;gt;len) return 0; *val = v-&amp;gt;data[idx]; return 1; } /* Benchmark Compuatation */ void combinel(vec_ptr v, data_t *dest) { long int i; *dest = IDENT; for(i = 0; i &amp;lt; vec_length(v); i++){ data_t val; get_vec_element(v,i,&amp;amp;val); *dest = *dest OP val; } } /* OP/IDENT 都是宏（macros），可以为加法或乘法， data_t可以为多种类型如int,long,double等 */ 未优化的写法：如上所示，每次取元素时都要进行边界检测 基本优化法：只进行一次取元素：取指向vec首元素的指针，然后进行指针运算，即可遍历vec，减少了调用procedures的次数 现代CPU设计：可以一次性读取多条机器指令（Instruction cache），判断指令间的相关性，对相互间不影响的指令可以同时执行，从而达到一个机器周期能执行多条指令的目的，称为超标量指令处理器（Superscalar processor) 流水线型（pipeline)功能单元：乘法操作需要三个机器周期，分成stage1,stage2,stage3，但是在运算stage2时，可以让乘法单元的stage1进行新一轮的乘法操作，这样乘法单元的三个stage能尽可能繁忙，减少运行时间。 Haswell CPU一共有8个功能单元：包括2个加载单元，一个存储单元，4个整数单元，2个浮点乘，一个浮点加，一个浮点除。 每个算数运算所需时间可以由延迟（latency），发射时间（issue time），容量（capacity）描述，其中延迟表示一个计算单元计算一次所需时间，发射时间表示计算单元进行一次新的加载（or发射）需要几个机器周期，容量表示处理该运算的运算单元有几个。 循环展开优化法：将循环体内部的单次运算编程可以并行(or pipeline)的多次计算，使得一个机器周期尽可能计算多的计算。 //未展开:不能进行pipeline t = t OP d[i]; //2*1展开:也不能pipeline，计算顺序没有变化 t = (t OP d[i]) OP d[i+1]; //2*1a展开：可以pipeline,运行时间减半 t = t OP (d[i] OP d[i+1]); //2*2展开：pipeline，与上面方法类似,two independent streams of operations. x0 = x0 OP d[i]; x1 = x1 OP d[i+1]; 使用向量指令优化：向量指令可以使一次机器循环执行多个操作，基于YMM寄存器（32位/64位），向量化编程主要用在声音，图像处理，视频等浮点数领域。 优化对比： 其中Integer的吞吐量因为只有两个加载单元，限制为0.5而不是0.25. 避免难以预测的分支判断 现代处理器设计图： 其中需要对条件分支进行prediction，由于运算出来的寄存器结果都存在register file（寄存器缓存中），每个寄存器可能都缓存了之前几百次计算结果，当prediction出现错误后，需要返回将寄存器都返回到某一状态，从而造成时间浪费。</summary></entry><entry><title type="html">Post Example With Hr</title><link href="http://localhost:4000/hr-example.html" rel="alternate" type="text/html" title="Post Example With Hr" /><published>2019-07-09T00:00:00+08:00</published><updated>2019-07-09T00:00:00+08:00</updated><id>http://localhost:4000/hr%20example</id><content type="html" xml:base="http://localhost:4000/hr-example.html">&lt;p&gt;Lorem ipsum&lt;sup id=&quot;fnref:1&quot;&gt;&lt;a href=&quot;#fn:1&quot; class=&quot;footnote&quot;&gt;1&lt;/a&gt;&lt;/sup&gt; dolor sit amet, consectetur adipiscing elit. Pellentesque vel lacinia neque. Praesent nulla quam, ullamcorper in sollicitudin ac, molestie sed justo. Cras aliquam, sapien id consectetur accumsan, augue magna faucibus ex, ut ultricies turpis tortor vel ante. In at rutrum tellus. Nullam vestibulum metus eu purus malesuada, volutpat mattis leo facilisis. Sed consectetur, nisl et semper laoreet, velit augue congue nunc, eget eleifend odio erat eu sapien. Phasellus dictum efficitur dapibus. Morbi porta lacinia tincidunt. Nam aliquet est mi, nec lacinia ipsum elementum sed. Nam feugiat ipsum tortor, et pretium purus sollicitudin et.&lt;/p&gt;
-
-&lt;hr /&gt;
-
-&lt;p&gt;Mauris viverra dictum ultricies&lt;sup id=&quot;fnref:2&quot;&gt;&lt;a href=&quot;#fn:2&quot; class=&quot;footnote&quot;&gt;2&lt;/a&gt;&lt;/sup&gt;. Vestibulum&lt;sup id=&quot;fnref:3&quot;&gt;&lt;a href=&quot;#fn:3&quot; class=&quot;footnote&quot;&gt;3&lt;/a&gt;&lt;/sup&gt; quis ipsum euismod, facilisis metus sed, varius ipsum. Donec scelerisque lacus libero, eu dignissim sem venenatis at. Nunc a egestas tortor, sed feugiat leo. Vestibulum porta tincidunt tellus, vitae ornare tortor. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Sed nunc neque, tempor in iaculis non, faucibus et metus. Etiam id nisl ut lorem gravida euismod.&lt;/p&gt;
-
-&lt;p&gt;Fusce non velit cursus ligula mattis convallis vel at metus. Sed pharetra tellus massa, non elementum eros vulputate non. Suspendisse potenti. Quisque arcu felis, laoreet vel accumsan sit amet, fermentum at nunc. Sed massa quam, auctor in eros quis, porttitor tincidunt orci. Nulla convallis id sapien ornare viverra. Cras nec est lacinia ligula porta tincidunt. Nam a est eget ligula pellentesque posuere. Maecenas quis enim ac risus accumsan scelerisque. Aliquam vitae libero sapien. Etiam convallis, metus nec suscipit condimentum, quam massa congue velit, sit amet sollicitudin nisi tortor a lectus. Cras a arcu enim. Suspendisse hendrerit euismod est ac gravida. Donec vitae elit tristique, suscipit eros at, aliquam augue. In ac faucibus dui. Sed tempor lacus tristique elit sagittis, vitae tempor massa convallis.&lt;/p&gt;
-
-&lt;hr data-content=&quot;discussions&quot; /&gt;
-
-&lt;p&gt;This article has been discussed here:&lt;/p&gt;
-&lt;ul&gt;
-  &lt;li&gt;&lt;a href=&quot;#&quot;&gt;lobste.rs&lt;/a&gt;&lt;/li&gt;
-  &lt;li&gt;&lt;a href=&quot;#&quot;&gt;/r/webdev&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-&lt;p&gt;Feel free to reach out at my email to leave feedback and talk about the article.&lt;/p&gt;
-
-&lt;hr data-content=&quot;footnotes&quot; /&gt;
-
-&lt;div class=&quot;footnotes&quot;&gt;
-  &lt;ol&gt;
-    &lt;li id=&quot;fn:1&quot;&gt;
-      &lt;p&gt;Okay here I should put something about “ipsum”. &lt;a href=&quot;#fnref:1&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-    &lt;/li&gt;
-    &lt;li id=&quot;fn:2&quot;&gt;
-      &lt;p&gt;same goes for this. &lt;a href=&quot;#fnref:2&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-    &lt;/li&gt;
-    &lt;li id=&quot;fn:3&quot;&gt;
-      &lt;p&gt;I studied latin in high school but im not able to translate &lt;em&gt;anything&lt;/em&gt;! By the way this is a longer footnote and i think it is still pretty cool, even prettier than shortier ones even though it does not say anything useful but whatever. &lt;a href=&quot;#fnref:3&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-    &lt;/li&gt;
-  &lt;/ol&gt;
-&lt;/div&gt;</content><author><name>zhangtie</name></author><summary type="html">Lorem ipsum1 dolor sit amet, consectetur adipiscing elit. Pellentesque vel lacinia neque. Praesent nulla quam, ullamcorper in sollicitudin ac, molestie sed justo. Cras aliquam, sapien id consectetur accumsan, augue magna faucibus ex, ut ultricies turpis tortor vel ante. In at rutrum tellus. Nullam vestibulum metus eu purus malesuada, volutpat mattis leo facilisis. Sed consectetur, nisl et semper laoreet, velit augue congue nunc, eget eleifend odio erat eu sapien. Phasellus dictum efficitur dapibus. Morbi porta lacinia tincidunt. Nam aliquet est mi, nec lacinia ipsum elementum sed. Nam feugiat ipsum tortor, et pretium purus sollicitudin et. Okay here I should put something about “ipsum”. &amp;#8617;</summary></entry></feed>
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Q4Wq&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Q4Wq.png&quot; alt=&quot;y6Q4Wq.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">链接 链接详解 静态链接例子 对于两个.c文件，如何形成可执行的目标文件呢？ 两个源代码分别经过预处理编译器，编译编译器，汇编编译器，生成了两个可重定向的目标文件，再经过链接器，链接成可执行目标文件。(在编译过程中需要指定两个.c文件) 链接器优势 模块化：程序是由许多小的源文件组成，而不是大的单一文件。并且能构建包含许多函数的库。 提高效率：节省时间：当修改源文件时，只需要重新编译那个修改的源文件，而不需要重新编译其他源文件。节省空间：公用的函数压缩成库，函数调用库时，只需要加载库中的某一些函数。 链接器的工作步骤 符号解析（简单解析） 程序能够定义和引用符号（全局变量或者函数） 这些符号（全局变量/函数）的定义在目标文件（.o)中以符号表的形式保存着，每一个符号对应着名称，大小，符号位置（以structs形式） 在符号解析阶段，链接器将每一个符号引用和其定义（名称，大小，符号位置）一一对应。 重定位阶段 目的是将分开储存的数据和代码组合成单一区域 重定位：由符号的相对位置，找到其绝对位置 更新符号引用中的位置为它们的绝对位置？？ 一些定义 三种目标文件（object files）（模块） 重定向目标文件（.o file）（汇编器生成的二进制文件）：不能直接加载当内存，需要等待链接器的链接，其中数据和代码以某种形式存储（ELF），每一个.o文件对应着一个源文件。 可运行目标文件（a.out file）能够直接加载到内存并运行 共享目标文件（.so file）（共享库）：特殊的重定向目标文件，能够在加载时间？？和运行时期动态的载入内存和动态链接，在windows中称为dll文件。 可执行可链接格式（ELF） 针对二进制目标文件（上面三种）的标准格式，所以上面三种文件又称为ELF二进制。 这种二进制文件的格式如下图所示：每一部分都有详细划分。 .bss文件储存未初始化的全局变量。 链接器符号/链接步骤 链接器符号 全局符号（global symbols)：在模块m中定义，并能被其他模块引用的符号，比如non-static 函数或者non-static 全局变量 外部符号（external symbols）：在模块m中被引用，在其他模块被定义的全局符号 局部符号（local symbols）：在模块m中定义，只能在模块m中引用的符号，比如static的函数和全局变量。 区分局部非静态变量和局部静态变量：local non-static存在stack上，local static存在.bss或者.data 强符号/或符号：强符号：过程/已经初始化的全局变量，弱符号：未初始化的全局变量，不允许多个同名强变量，但允许多个同名弱变量，会随机选择一个初始化。一定要避免弱变量，很容易出Bug 全局符号使用原则：尽可能static，尽可能初始化，尽可能声明external 链接步骤 符号解析：确定目标文件中的符号表 重定向 可以发现：重定向需要重新规划各个重定向目标文件的.text./data section的地址，从而组成可执行目标文件的.text和.data 可以发现：对于那些需要定位地址的部分，如array的地址和sum函数的地址，都用00000000代替，然后使用了relocation entry，这些entries可以帮助linker有足够的信息，组成可执行的目标文件（详细解释见教材，视频也没怎么讲） 可以发现：之前array和sum的地址确定了！（之前好像用的相对地址）然后main函数好像就是紧接在system code的后面。 这张图的困惑：1，为什么要多开8个字节的stack呢，明明callee个caller使用寄存器来共享数据呀 2，程序计数器（rpi）的相对地址是什么东西。 最后，可执行文件被加载到内存，如下图所示 上图针对linux系统，程序开始地址0x400000，有一段内存映射区域供共享库使用。 链接库 如何方便的使用那些常用的函数呢：方法1：把常用函数用单一的源文件存储，这样在linker会把一个很大的.o文件链接进去，时间空间成本高。方法2：把常用函数分别用源文件存储，程序员在编译时手动显式的链接要使用的.o文件，这样效率高，但增加程序员负担。 解决办法：把常用的函数打包形成链接库，在main.c文件中包含这些链接库，liner可以在链接库中找到所需的函数的.o文件，链接需要的.o文件 链接库按照链接的时间不同：分为静态链接库和动态链接库。 静态链接库 所有相关的.o文件重新排位后压缩到一个.a（archive file/档案文件）（AR：归档器）中，当liner发现了无法解析的符号时，会在一个或多个.o文件中查找，找到所需要的文件 可以发现：归档器（archiver)允许更新文件以及重新编译替换文件 可以发现：对象文件按字符串排列索引 链接过程：在所需要的归档文件中选择所需函数链接即可(.h文件存储了所需要的函数声明，然后链接器按照声明在归档文件中找到所需函数)（.h文件在cpp过程中被放在主代码部分形成.i文件，其实里面内容就是些全局对象的声明） 链接如下图所示： 编译指令如下： 可以发现：按照linker执行“解析符号”的顺序，不能把.a(即图中的-lmine)文件放在前面，不然无法解析.o文件中的符号。 静态链接库缺点：1，需要不断地复制libc中的函数，如果你的system libraries中有Bug，所有使用了该库的文件都需要重新显式relink。 动态链接库 定义：.o文件可以在应用程序（加载到内存或）执行的时候动态的加载和链接进去。 加载时间（load-time）链接：Linux通常情况下加载应用程序会使用此动态加载的方法。 运行时间（run-time）链接：可以在程序运行期间，自由选择任何时间link所需的.o文件，通过使用dlopen()接口 总结 链接可以发生在：程序编译完成（静态链接库），程序被加载到内存（动态链接库），程序运行时（动态链接库） 库打桩技术 可以在complie time/ link-time/ Run-time三个阶段进行库打桩，前两个略，重点是动态链接库的库打桩技术 首先定义我们自己的mymalloc.c文件，然后生成.so文件，照常编译和链接main.o，但是在运行的时候加入一行命令行，让链接器首先在mymalloc.so这个共享库内解析符号，从而实现了我们自定义的的wraper函数，代替了系统自带的malloc函数。这样我们能够统计malloc地址等等。</summary></entry></feed>
