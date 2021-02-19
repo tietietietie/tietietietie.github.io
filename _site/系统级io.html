@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>CSAPP笔记：系统IO</title>
+
+  <!-- Begin Jekyll SEO tag v2.6.1 -->
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="CSAPP笔记：系统IO" />
+<meta name="author" content="tie" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="系统级I/O Unix I/O 概述 低等级的I/0，在Linux系统中，文件就是一系列的字符串，并且所有的I/O设备，比如disk/terminal/socket，都被看作是文件。甚至连内核kernel，都被看做是文件。 通过简单的打开，关闭，读，写等接口，open(),close(),read(),write()等，对文件（也就是这些I/O设备）进行操作。 当前文件位置：有一个指向当前文件中某一位置的指针K（current file position），帮助我们定位。（当前，那些terminal比如socket,type..没有此指针，因为是数据流） 文件类型 每个文件都有自己的唯一类型，常见包括：1，常规文件：随机信息。2，目录文件：指向文件的一组索引。3，socket：可以和其他机器的进程交换数据。4，管道：不同进程之间交换数据。 常规文件 应用程序（非os），可以区分这些常规文件类型，包括文本文件（ASCII/Unicode），二进制文件（图片，.o，声音，视频） 其中，文本文件就是一系列的行组成的，不同操作系统用不同的行结束符，linux/mac，使用’\n’也就是0xa，也就是ASCII中的LF（Line fead），windows中，行结束符包括两个：CR：表示回车+LF：表示换行。 目录文件 包含了一个”链接”数组。每一个链接指向一个文件名 每个个目录文件至少包含有两条link，其中.(dot)表示当前目录本身，..(dot dot)表示父目录 操作目录：mkdir:创建空目录，ls：查看目录内容，rmdir：删除空目录 目录层次结构如上所示。 可以使用绝对路径名和相对路径名来访问hello.c 操作文件 打开文件 使用open(“路径名”，选项)：选项包括RDONLY（只读）oppend（从尾部开始）等 注意：调用系统函数一定要检查返回值 fd: file descriptor：文件描述符，每打开一个文件对应一个fd，系统有限制最多打开的文件数，如fd&lt;=1024 关闭文件 也需要检查错误，因为在线程？？共享内存（数据）时，可能出现两个进程关闭同一个文件，从而一个进程会关闭已经关闭的文件，从而报错。 读取文件 返回值有三种情况：0，表示读取到文件结束符（文件读完了），&lt;0，表示没有读取到文件（报错），&gt;0，表示读取到的字节数 会出现short counts：读取到的文件量比我们设置的要少 在一些terminal（shell?socket)：会先读取一定量的字节,然后再让OS read？ 通过改变current file position K表示我们读到哪里了 可以指定我们要读多少数，不一定buf[512]全部读满 写入文件 指定需要写入的文件（fd），然后在文件的current file position开始写入我们的数据。和read()类似，我们需指定要写入的字节数，也会出现写入的字计数比我们想要的少的情况。 读写举例 非常糟糕的代码：一直在不断调用系统函数，所以一直在上下文切换，context switch会花费20000~40000个机器周期（使用strace可以追踪system call） short counts 通常在terminal读取数据，以及在socket读取或者写入数据时，会出现short counts，我们需要健壮的I/O接口来处理short counts。 健壮的I/O文件包(RIO) 是系统I/O的包装（wrappers），能够对short counts(读写不足？)提供有效的解决方式。 提供两种类型的函数：没有缓存的input和output函数，有缓存的读取函数（input/read） Unbuffered RIO 没有缓冲的函数和unix的IO类型，不同点在于，rio_readn会一直读取直到EOF。rio_writen将不会发生写入不足（永久等待？） 理解源码！（记得看RIO的全部源码） Buffered RIO input 在读取文件时使用，会预先读取一段文件存入buffer（其中有没有被user读的文件），当Buffer的文件全部读完后，在调用unix I/0读取文件，从而减少系统调用次数。 初始化buffered RIO 所有buffered IO的信心都存在一个struct里面，其中有这段buffer的描述符，待读的字节量，指向下一个待读字节的指针，buffer的容量等等信息 Buffered IO举例 注意RIO包中常见函数的用法 元数据/文件共享/重定向 元数据 包含某个文件的信息，为struct形式，由kernal管理，每个文件都有，可以通过stat函数访问. 调用stat函数，可以复制stat中的信息，还能得到文件路径名:stat(“filepath”,&amp;stat)； 文件共享 每个进程中都有一个描述符表，表示此进程中打开的文件。 每个打开的文件，都会有一个“打开文件表”，由内核管理 每个“打开文件表”中都包含1，文件的基本信息，比如上面的struct。2，file position k，3.refcnt：被引用的进程个数 虚拟节点（v-node）中保存着文件的基本信息，无论文件打开还是关闭着，都存在那里。 注意：一个进程可以打开两次相同文件，得到两个不同的文件描述符，也会产生两个不同的“打开文件表”，这两个表中的file pos不一样，如下图所示： 使用fork：会复制一份一模一样的“描述符表”，指向形同的“打开文件表”，只是其中的refcnt+1. 文件重定向 使用dup2()函数，修改“描述符表”中表项，让标准输出的fd1指向我们想重定向的目标文件， 可以发向，fd1中存的表项由a变成b，从而输出变为b，具体变化图如下： 可以发现：refcnt变成了2，也就是说就算是同一进程，也能修改表项，使得一个open file table被指向两次，所以也要关闭两次，所有使用dup2也容易产生bug（和fork一样得小心使用） 标准库中的I/O 与RIO类型，也是使用的buffer，但是比RIO提供了更多的功能，如下图表示其关系： 如何选择呢： 1，尽量是使用standard和RIO，而不是Unix IO,除非是写signal handler（因为fprint等不是异步信息安全的） 2，在处理terminal/disk文件时，使用standard IO，在处理网络socket文件时，使用RIO，因为标准IO没有对socket文件做出优化。" />
+<meta property="og:description" content="系统级I/O Unix I/O 概述 低等级的I/0，在Linux系统中，文件就是一系列的字符串，并且所有的I/O设备，比如disk/terminal/socket，都被看作是文件。甚至连内核kernel，都被看做是文件。 通过简单的打开，关闭，读，写等接口，open(),close(),read(),write()等，对文件（也就是这些I/O设备）进行操作。 当前文件位置：有一个指向当前文件中某一位置的指针K（current file position），帮助我们定位。（当前，那些terminal比如socket,type..没有此指针，因为是数据流） 文件类型 每个文件都有自己的唯一类型，常见包括：1，常规文件：随机信息。2，目录文件：指向文件的一组索引。3，socket：可以和其他机器的进程交换数据。4，管道：不同进程之间交换数据。 常规文件 应用程序（非os），可以区分这些常规文件类型，包括文本文件（ASCII/Unicode），二进制文件（图片，.o，声音，视频） 其中，文本文件就是一系列的行组成的，不同操作系统用不同的行结束符，linux/mac，使用’\n’也就是0xa，也就是ASCII中的LF（Line fead），windows中，行结束符包括两个：CR：表示回车+LF：表示换行。 目录文件 包含了一个”链接”数组。每一个链接指向一个文件名 每个个目录文件至少包含有两条link，其中.(dot)表示当前目录本身，..(dot dot)表示父目录 操作目录：mkdir:创建空目录，ls：查看目录内容，rmdir：删除空目录 目录层次结构如上所示。 可以使用绝对路径名和相对路径名来访问hello.c 操作文件 打开文件 使用open(“路径名”，选项)：选项包括RDONLY（只读）oppend（从尾部开始）等 注意：调用系统函数一定要检查返回值 fd: file descriptor：文件描述符，每打开一个文件对应一个fd，系统有限制最多打开的文件数，如fd&lt;=1024 关闭文件 也需要检查错误，因为在线程？？共享内存（数据）时，可能出现两个进程关闭同一个文件，从而一个进程会关闭已经关闭的文件，从而报错。 读取文件 返回值有三种情况：0，表示读取到文件结束符（文件读完了），&lt;0，表示没有读取到文件（报错），&gt;0，表示读取到的字节数 会出现short counts：读取到的文件量比我们设置的要少 在一些terminal（shell?socket)：会先读取一定量的字节,然后再让OS read？ 通过改变current file position K表示我们读到哪里了 可以指定我们要读多少数，不一定buf[512]全部读满 写入文件 指定需要写入的文件（fd），然后在文件的current file position开始写入我们的数据。和read()类似，我们需指定要写入的字节数，也会出现写入的字计数比我们想要的少的情况。 读写举例 非常糟糕的代码：一直在不断调用系统函数，所以一直在上下文切换，context switch会花费20000~40000个机器周期（使用strace可以追踪system call） short counts 通常在terminal读取数据，以及在socket读取或者写入数据时，会出现short counts，我们需要健壮的I/O接口来处理short counts。 健壮的I/O文件包(RIO) 是系统I/O的包装（wrappers），能够对short counts(读写不足？)提供有效的解决方式。 提供两种类型的函数：没有缓存的input和output函数，有缓存的读取函数（input/read） Unbuffered RIO 没有缓冲的函数和unix的IO类型，不同点在于，rio_readn会一直读取直到EOF。rio_writen将不会发生写入不足（永久等待？） 理解源码！（记得看RIO的全部源码） Buffered RIO input 在读取文件时使用，会预先读取一段文件存入buffer（其中有没有被user读的文件），当Buffer的文件全部读完后，在调用unix I/0读取文件，从而减少系统调用次数。 初始化buffered RIO 所有buffered IO的信心都存在一个struct里面，其中有这段buffer的描述符，待读的字节量，指向下一个待读字节的指针，buffer的容量等等信息 Buffered IO举例 注意RIO包中常见函数的用法 元数据/文件共享/重定向 元数据 包含某个文件的信息，为struct形式，由kernal管理，每个文件都有，可以通过stat函数访问. 调用stat函数，可以复制stat中的信息，还能得到文件路径名:stat(“filepath”,&amp;stat)； 文件共享 每个进程中都有一个描述符表，表示此进程中打开的文件。 每个打开的文件，都会有一个“打开文件表”，由内核管理 每个“打开文件表”中都包含1，文件的基本信息，比如上面的struct。2，file position k，3.refcnt：被引用的进程个数 虚拟节点（v-node）中保存着文件的基本信息，无论文件打开还是关闭着，都存在那里。 注意：一个进程可以打开两次相同文件，得到两个不同的文件描述符，也会产生两个不同的“打开文件表”，这两个表中的file pos不一样，如下图所示： 使用fork：会复制一份一模一样的“描述符表”，指向形同的“打开文件表”，只是其中的refcnt+1. 文件重定向 使用dup2()函数，修改“描述符表”中表项，让标准输出的fd1指向我们想重定向的目标文件， 可以发向，fd1中存的表项由a变成b，从而输出变为b，具体变化图如下： 可以发现：refcnt变成了2，也就是说就算是同一进程，也能修改表项，使得一个open file table被指向两次，所以也要关闭两次，所有使用dup2也容易产生bug（和fork一样得小心使用） 标准库中的I/O 与RIO类型，也是使用的buffer，但是比RIO提供了更多的功能，如下图表示其关系： 如何选择呢： 1，尽量是使用standard和RIO，而不是Unix IO,除非是写signal handler（因为fprint等不是异步信息安全的） 2，在处理terminal/disk文件时，使用standard IO，在处理网络socket文件时，使用RIO，因为标准IO没有对socket文件做出优化。" />
+<link rel="canonical" href="http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html" />
+<meta property="og:url" content="http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html" />
+<meta property="og:site_name" content="tie’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-04-23T08:43:00+08:00" />
+<script type="application/ld+json">
+{"url":"http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html","headline":"CSAPP笔记：系统IO","dateModified":"2020-04-23T08:43:00+08:00","datePublished":"2020-04-23T08:43:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html"},"author":{"@type":"Person","name":"tie"},"description":"系统级I/O Unix I/O 概述 低等级的I/0，在Linux系统中，文件就是一系列的字符串，并且所有的I/O设备，比如disk/terminal/socket，都被看作是文件。甚至连内核kernel，都被看做是文件。 通过简单的打开，关闭，读，写等接口，open(),close(),read(),write()等，对文件（也就是这些I/O设备）进行操作。 当前文件位置：有一个指向当前文件中某一位置的指针K（current file position），帮助我们定位。（当前，那些terminal比如socket,type..没有此指针，因为是数据流） 文件类型 每个文件都有自己的唯一类型，常见包括：1，常规文件：随机信息。2，目录文件：指向文件的一组索引。3，socket：可以和其他机器的进程交换数据。4，管道：不同进程之间交换数据。 常规文件 应用程序（非os），可以区分这些常规文件类型，包括文本文件（ASCII/Unicode），二进制文件（图片，.o，声音，视频） 其中，文本文件就是一系列的行组成的，不同操作系统用不同的行结束符，linux/mac，使用’\\n’也就是0xa，也就是ASCII中的LF（Line fead），windows中，行结束符包括两个：CR：表示回车+LF：表示换行。 目录文件 包含了一个”链接”数组。每一个链接指向一个文件名 每个个目录文件至少包含有两条link，其中.(dot)表示当前目录本身，..(dot dot)表示父目录 操作目录：mkdir:创建空目录，ls：查看目录内容，rmdir：删除空目录 目录层次结构如上所示。 可以使用绝对路径名和相对路径名来访问hello.c 操作文件 打开文件 使用open(“路径名”，选项)：选项包括RDONLY（只读）oppend（从尾部开始）等 注意：调用系统函数一定要检查返回值 fd: file descriptor：文件描述符，每打开一个文件对应一个fd，系统有限制最多打开的文件数，如fd&lt;=1024 关闭文件 也需要检查错误，因为在线程？？共享内存（数据）时，可能出现两个进程关闭同一个文件，从而一个进程会关闭已经关闭的文件，从而报错。 读取文件 返回值有三种情况：0，表示读取到文件结束符（文件读完了），&lt;0，表示没有读取到文件（报错），&gt;0，表示读取到的字节数 会出现short counts：读取到的文件量比我们设置的要少 在一些terminal（shell?socket)：会先读取一定量的字节,然后再让OS read？ 通过改变current file position K表示我们读到哪里了 可以指定我们要读多少数，不一定buf[512]全部读满 写入文件 指定需要写入的文件（fd），然后在文件的current file position开始写入我们的数据。和read()类似，我们需指定要写入的字节数，也会出现写入的字计数比我们想要的少的情况。 读写举例 非常糟糕的代码：一直在不断调用系统函数，所以一直在上下文切换，context switch会花费20000~40000个机器周期（使用strace可以追踪system call） short counts 通常在terminal读取数据，以及在socket读取或者写入数据时，会出现short counts，我们需要健壮的I/O接口来处理short counts。 健壮的I/O文件包(RIO) 是系统I/O的包装（wrappers），能够对short counts(读写不足？)提供有效的解决方式。 提供两种类型的函数：没有缓存的input和output函数，有缓存的读取函数（input/read） Unbuffered RIO 没有缓冲的函数和unix的IO类型，不同点在于，rio_readn会一直读取直到EOF。rio_writen将不会发生写入不足（永久等待？） 理解源码！（记得看RIO的全部源码） Buffered RIO input 在读取文件时使用，会预先读取一段文件存入buffer（其中有没有被user读的文件），当Buffer的文件全部读完后，在调用unix I/0读取文件，从而减少系统调用次数。 初始化buffered RIO 所有buffered IO的信心都存在一个struct里面，其中有这段buffer的描述符，待读的字节量，指向下一个待读字节的指针，buffer的容量等等信息 Buffered IO举例 注意RIO包中常见函数的用法 元数据/文件共享/重定向 元数据 包含某个文件的信息，为struct形式，由kernal管理，每个文件都有，可以通过stat函数访问. 调用stat函数，可以复制stat中的信息，还能得到文件路径名:stat(“filepath”,&amp;stat)； 文件共享 每个进程中都有一个描述符表，表示此进程中打开的文件。 每个打开的文件，都会有一个“打开文件表”，由内核管理 每个“打开文件表”中都包含1，文件的基本信息，比如上面的struct。2，file position k，3.refcnt：被引用的进程个数 虚拟节点（v-node）中保存着文件的基本信息，无论文件打开还是关闭着，都存在那里。 注意：一个进程可以打开两次相同文件，得到两个不同的文件描述符，也会产生两个不同的“打开文件表”，这两个表中的file pos不一样，如下图所示： 使用fork：会复制一份一模一样的“描述符表”，指向形同的“打开文件表”，只是其中的refcnt+1. 文件重定向 使用dup2()函数，修改“描述符表”中表项，让标准输出的fd1指向我们想重定向的目标文件， 可以发向，fd1中存的表项由a变成b，从而输出变为b，具体变化图如下： 可以发现：refcnt变成了2，也就是说就算是同一进程，也能修改表项，使得一个open file table被指向两次，所以也要关闭两次，所有使用dup2也容易产生bug（和fork一样得小心使用） 标准库中的I/O 与RIO类型，也是使用的buffer，但是比RIO提供了更多的功能，如下图表示其关系： 如何选择呢： 1，尽量是使用standard和RIO，而不是Unix IO,除非是写signal handler（因为fprint等不是异步信息安全的） 2，在处理terminal/disk文件时，使用standard IO，在处理网络socket文件时，使用RIO，因为标准IO没有对socket文件做出优化。","@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="tie's blog" />
+
+  <link rel="shortcut icon" type="image/x-icon" href="/logo.png" />
+  <link rel="stylesheet" href="/assets/css/main.css" />
+</head><body a="auto">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        <a href="/">..</a>
+
+<article>
+  <p class="post-meta">
+    <time datetime="2020-04-23 08:43:00 +0800">2020-04-23</time>
+  </p>
+  
+  <h1>CSAPP笔记：系统IO</h1>
+
+  <h1 id="系统级io">系统级I/O</h1>
+
+<h2 id="unix-io">Unix I/O</h2>
+
+<h3 id="概述">概述</h3>
+
+<p>低等级的I/0，在Linux系统中，文件就是一系列的字符串，并且所有的I/O设备，比如disk/terminal/socket，都被看作是文件。甚至连内核kernel，都被看做是文件。</p>
+
+<p>通过简单的打开，关闭，读，写等接口，open(),close(),read(),write()等，对文件（也就是这些I/O设备）进行操作。</p>
+
+<p>当前文件位置：有一个指向当前文件中某一位置的指针K（current file position），帮助我们定位。（当前，那些terminal比如socket,type..没有此指针，因为是数据流）</p>
+
+<h3 id="文件类型">文件类型</h3>
+
+<p>每个文件都有自己的唯一类型，常见包括：1，常规文件：随机信息。2，目录文件：指向文件的一组索引。3，socket：可以和其他机器的进程交换数据。4，管道：不同进程之间交换数据。</p>
+
+<h4 id="常规文件">常规文件</h4>
+
+<p>应用程序（非os），可以区分这些常规文件类型，包括文本文件（ASCII/Unicode），二进制文件（图片，.o，声音，视频）</p>
+
+<p>其中，文本文件就是一系列的行组成的，不同操作系统用不同的行结束符，linux/mac，使用’\n’也就是0xa，也就是ASCII中的LF（Line fead），windows中，行结束符包括两个：CR：表示回车+LF：表示换行。</p>
+
+<h4 id="目录文件">目录文件</h4>
+
+<p>包含了一个”链接”数组。每一个链接指向一个文件名</p>
+
+<p>每个个目录文件至少包含有两条link，其中.(dot)表示当前目录本身，..(dot dot)表示父目录</p>
+
+<p>操作目录：mkdir:创建空目录，ls：查看目录内容，rmdir：删除空目录</p>
+
+<p><a href="https://imgchr.com/i/yfMjdf"><img src="https://s3.ax1x.com/2021/02/19/yfMjdf.png" alt="yfMjdf.png" /></a></p>
+
+<p>目录层次结构如上所示。</p>
+
+<p><a href="https://imgchr.com/i/yfMXeP"><img src="https://s3.ax1x.com/2021/02/19/yfMXeP.png" alt="yfMXeP.png" /></a></p>
+
+<p>可以使用绝对路径名和相对路径名来访问hello.c</p>
+
+<h3 id="操作文件">操作文件</h3>
+
+<h4 id="打开文件">打开文件</h4>
+
+<p>使用open(“路径名”，选项)：选项包括RDONLY（只读）oppend（从尾部开始）等</p>
+
+<p><strong>注意：调用系统函数一定要检查返回值</strong></p>
+
+<p>fd: file descriptor：文件描述符，每打开一个文件对应一个fd，系统有限制最多打开的文件数，如fd&lt;=1024</p>
+
+<p><a href="https://imgchr.com/i/yfMLLt"><img src="https://s3.ax1x.com/2021/02/19/yfMLLt.png" alt="yfMLLt.png" /></a></p>
+
+<h4 id="关闭文件">关闭文件</h4>
+
+<p>也需要检查错误，因为在线程？？共享内存（数据）时，可能出现两个进程关闭同一个文件，从而一个进程会关闭已经关闭的文件，从而报错。</p>
+
+<p><a href="https://imgchr.com/i/yfMqsI"><img src="https://s3.ax1x.com/2021/02/19/yfMqsI.png" alt="yfMqsI.png" /></a></p>
+
+<h4 id="读取文件">读取文件</h4>
+
+<p>返回值有三种情况：0，表示读取到文件结束符（文件读完了），&lt;0，表示没有读取到文件（报错），&gt;0，表示读取到的字节数</p>
+
+<p>会出现short counts：读取到的文件量比我们设置的要少</p>
+
+<p>在一些terminal（shell?socket)：会先读取一定量的字节,然后再让OS read？</p>
+
+<p>通过改变current file position K表示我们读到哪里了</p>
+
+<p>可以指定我们要读多少数，不一定buf[512]全部读满</p>
+
+<p><a href="https://imgchr.com/i/yfMTRH"><img src="https://s3.ax1x.com/2021/02/19/yfMTRH.png" alt="yfMTRH.png" /></a></p>
+
+<h4 id="写入文件">写入文件</h4>
+
+<p>指定需要写入的文件（fd），然后在文件的current file position开始写入我们的数据。和read()类似，我们需指定要写入的字节数，也会出现写入的字计数比我们想要的少的情况。</p>
+
+<p><a href="https://imgchr.com/i/yfMoJe"><img src="https://s3.ax1x.com/2021/02/19/yfMoJe.png" alt="yfMoJe.png" /></a></p>
+
+<h4 id="读写举例">读写举例</h4>
+
+<p><a href="https://imgchr.com/i/yfMhdK"><img src="https://s3.ax1x.com/2021/02/19/yfMhdK.png" alt="yfMhdK.png" /></a></p>
+
+<p>非常糟糕的代码：一直在不断调用系统函数，所以一直在上下文切换，context switch会花费20000~40000个机器周期（使用strace可以追踪system call）</p>
+
+<h4 id="short-counts">short counts</h4>
+
+<p>通常在terminal读取数据，以及在socket读取或者写入数据时，会出现short counts，我们需要<strong>健壮的I/O接口</strong>来处理short counts。</p>
+
+<p><a href="https://imgchr.com/i/yfMIiD"><img src="https://s3.ax1x.com/2021/02/19/yfMIiD.png" alt="yfMIiD.png" /></a></p>
+
+<h2 id="健壮的io文件包rio">健壮的I/O文件包(RIO)</h2>
+
+<p>是系统I/O的包装（wrappers），能够对short counts(读写不足？)提供有效的解决方式。</p>
+
+<p>提供两种类型的函数：没有缓存的input和output函数，有缓存的读取函数（input/read）</p>
+
+<h3 id="unbuffered-rio">Unbuffered RIO</h3>
+
+<p>没有缓冲的函数和unix的IO类型，不同点在于，rio_readn会一直读取直到EOF。rio_writen将不会发生写入不足（永久等待？）</p>
+
+<p><a href="https://imgchr.com/i/yfM4IO"><img src="https://s3.ax1x.com/2021/02/19/yfM4IO.png" alt="yfM4IO.png" /></a></p>
+
+<p>理解源码！（<a href="caspp.cs.cmu.edu/3e/code.html">记得看RIO的全部源码</a>）</p>
+
+<h3 id="buffered-rio-input">Buffered RIO input</h3>
+
+<p>在读取文件时使用，会预先读取一段文件存入buffer（其中有没有被user读的文件），当Buffer的文件全部读完后，在调用unix I/0读取文件，从而减少系统调用次数。</p>
+
+<p><a href="https://imgchr.com/i/yfMfZ6"><img src="https://s3.ax1x.com/2021/02/19/yfMfZ6.png" alt="yfMfZ6.png" /></a></p>
+
+<h4 id="初始化buffered-rio">初始化buffered RIO</h4>
+
+<p>所有buffered IO的信心都存在一个struct里面，其中有这段buffer的描述符，待读的字节量，指向下一个待读字节的指针，buffer的容量等等信息</p>
+
+<p><a href="https://imgchr.com/i/yfMwZV"><img src="https://s3.ax1x.com/2021/02/19/yfMwZV.png" alt="yfMwZV.png" /></a></p>
+
+<h4 id="buffered-io举例">Buffered IO举例</h4>
+
+<p>注意RIO包中常见函数的用法</p>
+
+<p><a href="https://imgchr.com/i/yfM0aT"><img src="https://s3.ax1x.com/2021/02/19/yfM0aT.png" alt="yfM0aT.png" /></a></p>
+
+<h3 id="元数据文件共享重定向">元数据/文件共享/重定向</h3>
+
+<h4 id="元数据">元数据</h4>
+
+<p>包含某个文件的信息，为struct形式，由kernal管理，每个文件都有，可以通过stat函数访问.</p>
+
+<p><a href="https://imgchr.com/i/yfMriF"><img src="https://s3.ax1x.com/2021/02/19/yfMriF.png" alt="yfMriF.png" /></a></p>
+
+<p>调用stat函数，可以复制stat中的信息，还能得到文件路径名:stat(“filepath”,&amp;stat)；</p>
+
+<h4 id="文件共享">文件共享</h4>
+
+<p>每个进程中都有一个描述符表，表示此进程中打开的文件。</p>
+
+<p>每个打开的文件，都会有一个“打开文件表”，由内核管理</p>
+
+<p>每个“打开文件表”中都包含1，文件的基本信息，比如上面的struct。2，file position k，3.refcnt：被引用的进程个数</p>
+
+<p>虚拟节点（v-node）中保存着文件的基本信息，无论文件打开还是关闭着，都存在那里。</p>
+
+<p><a href="https://imgchr.com/i/yfMBIU"><img src="https://s3.ax1x.com/2021/02/19/yfMBIU.png" alt="yfMBIU.png" /></a></p>
+
+<p>注意：一个进程可以打开两次相同文件，得到两个不同的文件描述符，也会产生两个不同的“打开文件表”，这两个表中的file pos不一样，如下图所示：</p>
+
+<p><a href="https://imgchr.com/i/y2Dzhn"><img src="https://s3.ax1x.com/2021/02/17/y2Dzhn.png" alt="y2Dzhn.png" /></a></p>
+
+<p>使用fork：会复制一份一模一样的“描述符表”，指向形同的“打开文件表”，只是其中的refcnt+1.</p>
+
+<p><a href="https://imgchr.com/i/y2rFnU"><img src="https://s3.ax1x.com/2021/02/17/y2rFnU.png" alt="y2rFnU.png" /></a></p>
+
+<h4 id="文件重定向">文件重定向</h4>
+
+<p>使用dup2()函数，修改“描述符表”中表项，让标准输出的fd1指向我们想重定向的目标文件，</p>
+
+<p><a href="https://imgchr.com/i/y2rCcV"><img src="https://s3.ax1x.com/2021/02/17/y2rCcV.png" alt="y2rCcV.png" /></a></p>
+
+<p>可以发向，fd1中存的表项由a变成b，从而输出变为b，具体变化图如下：</p>
+
+<p><a href="https://imgchr.com/i/y2rPXT"><img src="https://s3.ax1x.com/2021/02/17/y2rPXT.png" alt="y2rPXT.png" /></a></p>
+
+<p><a href="https://imgchr.com/i/y2rkBF"><img src="https://s3.ax1x.com/2021/02/17/y2rkBF.png" alt="y2rkBF.png" /></a></p>
+
+<p>可以发现：refcnt变成了2，也就是说就算是同一进程，也能修改表项，使得一个open file table被指向两次，所以也要<strong>关闭两次</strong>，所有使用dup2也容易产生bug（和fork一样得小心使用）</p>
+
+<h3 id="标准库中的io">标准库中的I/O</h3>
+
+<p>与RIO类型，也是使用的buffer，但是比RIO提供了更多的功能，如下图表示其关系：</p>
+
+<p><a href="https://imgchr.com/i/y2rA74"><img src="https://s3.ax1x.com/2021/02/17/y2rA74.png" alt="y2rA74.png" /></a></p>
+
+<p>如何选择呢：</p>
+
+<p>1，尽量是使用standard和RIO，而不是Unix IO,除非是写signal handler（因为fprint等不是异步信息安全的）</p>
+
+<p>2，在处理terminal/disk文件时，使用standard IO，在处理网络socket文件时，使用RIO，因为标准IO没有对socket文件做出优化。</p>
+
+</article>
+      </div>
+    </main>
+
+    
+  </body>
+</html>

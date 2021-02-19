@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>CSAPP笔记：高速缓存</title>
+
+  <!-- Begin Jekyll SEO tag v2.6.1 -->
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="CSAPP笔记：高速缓存" />
+<meta name="author" content="tie" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="高速缓存 性质：体积小速度快的SRAM组成，完全由硬件控制，集成在CPU芯片内，储存着经常被访问的来自主存（main memory）的块（blocks）。 结构：S,E,B，其中s表示有多少个sets，e表示每个set有多少Line，b表示每个block中需偏移几个字节才能找到目标bytes。总容量是S * E * B 如何在缓存中读取目标字节： 先确定在哪个set，然后根据tag确定在哪个Line，然后根据block offset确定字节位置。 直接映射缓存（E = 1) 定义：每个set只有一行，当tag和当前set中的block.tag不复合（或者valid位为0），miss，此set.block被替换。 模拟：通过以下模拟可以发现当只有一行时，有相同set index的block会经常发生替换。（注意此处主存大小M是16字节怎么计算而来） E向关联缓存 定义：每一行set有多列（E&gt;1),此时CPU会通过复杂的硬件，比较同一个set不同块的tag值，从而找到目标的block，目前能实现的最大E为16。 block的大小是一个平衡值，太大则无法储存多个block，太小则可能会经常替换block。 如何知道一次是读4个字节还是两个字节呢？老师好像也不懂，应该由CPU根据类型是可以控制每次读的字节数字 最常见的替换策略是:LRU，最少被使用的块现被替换掉 read操作发生Miss，每次都是在发生Miss的快被替换 可以发现，同样的M,和缓存大小及地址值，但是t和s发生改变。 如何进行缓存写操作： 1,缓存命中所写block：两种策略 直接写入（write-through）：修改缓存block，并直接更新memory 回写（write back)：先修改缓存block，然后这个block被替换时，判断dirty bit（修改位），然后将修改后的block传给memory 2，缓存未命中所写block：两种策略 写-分配(write-allocate)：先把要修改的block加载到缓存在修改 写-不分配(No- write-allocate)：直接在memory中修改数据 一般使用的是：Write-back + Write-allocate 缓存层次结构 缓存性能测试： 未命中率：一般非常低，比如L1级为3-10%，L2级不到1% 命中时间：4-10 clock cycles 未命中损失：50-200 未命中损失很大，通常99%和97%命中率，性能差2倍 编写缓存友好的代码 让最常用的命令（内循环）能够快速访问 需要1，在内循环中，把经常用的数据定义成局部变量，因为局部变量一般放在寄存器中。2，每次循环跨距为1，也可以提高局部性，从而增加命中率。比如跨距为1比跨距为2的命中率大2倍。 通过对缓存的题解，可以量化我们的局部性。 存储器山 吞吐量（Read Throughput）：每秒钟能处理多少数据 Stride：步长，Size：数据量大小 可以发现当步长越小，数据量越小，吞吐量越大。 改变内层循环的空间局部性 背景：对N*N的矩阵做内积，一共需要N^3次操作，具体代码如下： 一共有三层循环（ijk)，最内层循环需要访问矩阵A和矩阵B，其访问方式如下所示： 假设一个block只能存放四个double，则每一次循环，A的miss率为四分之一，而B的Miss率为百分之百，一共为1.25 当改变内层循环的数据访问方式，提高空间局部性，如下所示： 此时(kij)，miss rate降低，虽然此时在内层循环会增加write操作，（上面ijk的sum存在寄存器，不考虑write），但是通常来说，write操作对性能的影响更小，因为write操作是可以延后处理的。 可以看到改变循环顺序，性能会发生很大的变化。 使用分块技术提高时间局部性 大致思路为，将程序中的数据结构组织成大的片（chunk），并能使一个片再加到L1，能够在这个片中进行所有的读写，完成后扔掉这个片。 分块会使程序变得难以理解。" />
+<meta property="og:description" content="高速缓存 性质：体积小速度快的SRAM组成，完全由硬件控制，集成在CPU芯片内，储存着经常被访问的来自主存（main memory）的块（blocks）。 结构：S,E,B，其中s表示有多少个sets，e表示每个set有多少Line，b表示每个block中需偏移几个字节才能找到目标bytes。总容量是S * E * B 如何在缓存中读取目标字节： 先确定在哪个set，然后根据tag确定在哪个Line，然后根据block offset确定字节位置。 直接映射缓存（E = 1) 定义：每个set只有一行，当tag和当前set中的block.tag不复合（或者valid位为0），miss，此set.block被替换。 模拟：通过以下模拟可以发现当只有一行时，有相同set index的block会经常发生替换。（注意此处主存大小M是16字节怎么计算而来） E向关联缓存 定义：每一行set有多列（E&gt;1),此时CPU会通过复杂的硬件，比较同一个set不同块的tag值，从而找到目标的block，目前能实现的最大E为16。 block的大小是一个平衡值，太大则无法储存多个block，太小则可能会经常替换block。 如何知道一次是读4个字节还是两个字节呢？老师好像也不懂，应该由CPU根据类型是可以控制每次读的字节数字 最常见的替换策略是:LRU，最少被使用的块现被替换掉 read操作发生Miss，每次都是在发生Miss的快被替换 可以发现，同样的M,和缓存大小及地址值，但是t和s发生改变。 如何进行缓存写操作： 1,缓存命中所写block：两种策略 直接写入（write-through）：修改缓存block，并直接更新memory 回写（write back)：先修改缓存block，然后这个block被替换时，判断dirty bit（修改位），然后将修改后的block传给memory 2，缓存未命中所写block：两种策略 写-分配(write-allocate)：先把要修改的block加载到缓存在修改 写-不分配(No- write-allocate)：直接在memory中修改数据 一般使用的是：Write-back + Write-allocate 缓存层次结构 缓存性能测试： 未命中率：一般非常低，比如L1级为3-10%，L2级不到1% 命中时间：4-10 clock cycles 未命中损失：50-200 未命中损失很大，通常99%和97%命中率，性能差2倍 编写缓存友好的代码 让最常用的命令（内循环）能够快速访问 需要1，在内循环中，把经常用的数据定义成局部变量，因为局部变量一般放在寄存器中。2，每次循环跨距为1，也可以提高局部性，从而增加命中率。比如跨距为1比跨距为2的命中率大2倍。 通过对缓存的题解，可以量化我们的局部性。 存储器山 吞吐量（Read Throughput）：每秒钟能处理多少数据 Stride：步长，Size：数据量大小 可以发现当步长越小，数据量越小，吞吐量越大。 改变内层循环的空间局部性 背景：对N*N的矩阵做内积，一共需要N^3次操作，具体代码如下： 一共有三层循环（ijk)，最内层循环需要访问矩阵A和矩阵B，其访问方式如下所示： 假设一个block只能存放四个double，则每一次循环，A的miss率为四分之一，而B的Miss率为百分之百，一共为1.25 当改变内层循环的数据访问方式，提高空间局部性，如下所示： 此时(kij)，miss rate降低，虽然此时在内层循环会增加write操作，（上面ijk的sum存在寄存器，不考虑write），但是通常来说，write操作对性能的影响更小，因为write操作是可以延后处理的。 可以看到改变循环顺序，性能会发生很大的变化。 使用分块技术提高时间局部性 大致思路为，将程序中的数据结构组织成大的片（chunk），并能使一个片再加到L1，能够在这个片中进行所有的读写，完成后扔掉这个片。 分块会使程序变得难以理解。" />
+<link rel="canonical" href="http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98.html" />
+<meta property="og:url" content="http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98.html" />
+<meta property="og:site_name" content="tie’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-03-18T14:16:00+08:00" />
+<script type="application/ld+json">
+{"url":"http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98.html","headline":"CSAPP笔记：高速缓存","dateModified":"2020-03-18T14:16:00+08:00","datePublished":"2020-03-18T14:16:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98.html"},"author":{"@type":"Person","name":"tie"},"description":"高速缓存 性质：体积小速度快的SRAM组成，完全由硬件控制，集成在CPU芯片内，储存着经常被访问的来自主存（main memory）的块（blocks）。 结构：S,E,B，其中s表示有多少个sets，e表示每个set有多少Line，b表示每个block中需偏移几个字节才能找到目标bytes。总容量是S * E * B 如何在缓存中读取目标字节： 先确定在哪个set，然后根据tag确定在哪个Line，然后根据block offset确定字节位置。 直接映射缓存（E = 1) 定义：每个set只有一行，当tag和当前set中的block.tag不复合（或者valid位为0），miss，此set.block被替换。 模拟：通过以下模拟可以发现当只有一行时，有相同set index的block会经常发生替换。（注意此处主存大小M是16字节怎么计算而来） E向关联缓存 定义：每一行set有多列（E&gt;1),此时CPU会通过复杂的硬件，比较同一个set不同块的tag值，从而找到目标的block，目前能实现的最大E为16。 block的大小是一个平衡值，太大则无法储存多个block，太小则可能会经常替换block。 如何知道一次是读4个字节还是两个字节呢？老师好像也不懂，应该由CPU根据类型是可以控制每次读的字节数字 最常见的替换策略是:LRU，最少被使用的块现被替换掉 read操作发生Miss，每次都是在发生Miss的快被替换 可以发现，同样的M,和缓存大小及地址值，但是t和s发生改变。 如何进行缓存写操作： 1,缓存命中所写block：两种策略 直接写入（write-through）：修改缓存block，并直接更新memory 回写（write back)：先修改缓存block，然后这个block被替换时，判断dirty bit（修改位），然后将修改后的block传给memory 2，缓存未命中所写block：两种策略 写-分配(write-allocate)：先把要修改的block加载到缓存在修改 写-不分配(No- write-allocate)：直接在memory中修改数据 一般使用的是：Write-back + Write-allocate 缓存层次结构 缓存性能测试： 未命中率：一般非常低，比如L1级为3-10%，L2级不到1% 命中时间：4-10 clock cycles 未命中损失：50-200 未命中损失很大，通常99%和97%命中率，性能差2倍 编写缓存友好的代码 让最常用的命令（内循环）能够快速访问 需要1，在内循环中，把经常用的数据定义成局部变量，因为局部变量一般放在寄存器中。2，每次循环跨距为1，也可以提高局部性，从而增加命中率。比如跨距为1比跨距为2的命中率大2倍。 通过对缓存的题解，可以量化我们的局部性。 存储器山 吞吐量（Read Throughput）：每秒钟能处理多少数据 Stride：步长，Size：数据量大小 可以发现当步长越小，数据量越小，吞吐量越大。 改变内层循环的空间局部性 背景：对N*N的矩阵做内积，一共需要N^3次操作，具体代码如下： 一共有三层循环（ijk)，最内层循环需要访问矩阵A和矩阵B，其访问方式如下所示： 假设一个block只能存放四个double，则每一次循环，A的miss率为四分之一，而B的Miss率为百分之百，一共为1.25 当改变内层循环的数据访问方式，提高空间局部性，如下所示： 此时(kij)，miss rate降低，虽然此时在内层循环会增加write操作，（上面ijk的sum存在寄存器，不考虑write），但是通常来说，write操作对性能的影响更小，因为write操作是可以延后处理的。 可以看到改变循环顺序，性能会发生很大的变化。 使用分块技术提高时间局部性 大致思路为，将程序中的数据结构组织成大的片（chunk），并能使一个片再加到L1，能够在这个片中进行所有的读写，完成后扔掉这个片。 分块会使程序变得难以理解。","@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="tie's blog" />
+
+  <link rel="shortcut icon" type="image/x-icon" href="/logo.png" />
+  <link rel="stylesheet" href="/assets/css/main.css" />
+</head><body a="auto">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        <a href="/">..</a>
+
+<article>
+  <p class="post-meta">
+    <time datetime="2020-03-18 14:16:00 +0800">2020-03-18</time>
+  </p>
+  
+  <h1>CSAPP笔记：高速缓存</h1>
+
+  <h1 id="高速缓存">高速缓存</h1>
+
+<p>性质：体积小速度快的SRAM组成，完全由硬件控制，集成在CPU芯片内，储存着经常被访问的来自主存（main memory）的块（blocks）。</p>
+
+<p><a href="https://imgchr.com/i/y6MR8x"><img src="https://s3.ax1x.com/2021/02/15/y6MR8x.png" alt="y6MR8x.png" /></a></p>
+
+<p>结构：S,E,B，其中s表示有多少个sets，e表示每个set有多少Line，b表示每个block中需偏移几个字节才能找到目标bytes。总容量是S * E * B</p>
+
+<p><a href="https://imgchr.com/i/y6MW26"><img src="https://s3.ax1x.com/2021/02/15/y6MW26.png" alt="y6MW26.png" /></a></p>
+
+<h3 id="如何在缓存中读取目标字节">如何在缓存中读取目标字节：</h3>
+
+<p><a href="https://imgchr.com/i/y6M6a9"><img src="https://s3.ax1x.com/2021/02/15/y6M6a9.png" alt="y6M6a9.png" /></a></p>
+
+<p>先确定在哪个set，然后根据tag确定在哪个Line，然后根据block offset确定字节位置。</p>
+
+<h3 id="直接映射缓存e--1">直接映射缓存（E = 1)</h3>
+
+<p>定义：每个set只有一行，当tag和当前set中的block.tag不复合（或者valid位为0），miss，此set.block被替换。</p>
+
+<p>模拟：通过以下模拟可以发现当只有一行时，有相同set index的block会经常发生替换。（注意此处主存大小M是16字节怎么计算而来）</p>
+
+<p><a href="https://imgchr.com/i/y6M2P1"><img src="https://s3.ax1x.com/2021/02/15/y6M2P1.png" alt="y6M2P1.png" /></a></p>
+
+<h3 id="e向关联缓存">E向关联缓存</h3>
+
+<p>定义：每一行set有多列（E&gt;1),此时CPU会通过复杂的硬件，比较同一个set不同块的tag值，从而找到目标的block，目前能实现的最大E为16。</p>
+
+<blockquote>
+  <p>block的大小是一个平衡值，太大则无法储存多个block，太小则可能会经常替换block。</p>
+
+  <p>如何知道一次是读4个字节还是两个字节呢？老师好像也不懂，应该由CPU根据类型是可以控制每次读的字节数字</p>
+
+  <p>最常见的替换策略是:LRU，最少被使用的块现被替换掉</p>
+
+  <p>read操作发生Miss，每次都是在发生Miss的快被替换</p>
+</blockquote>
+
+<p><a href="https://imgchr.com/i/y6Mc5R"><img src="https://s3.ax1x.com/2021/02/15/y6Mc5R.png" alt="y6Mc5R.png" /></a></p>
+
+<p>可以发现，同样的M,和缓存大小及地址值，但是t和s发生改变。</p>
+
+<h3 id="如何进行缓存写操作">如何进行缓存写操作：</h3>
+
+<p>1,缓存命中所写block：两种策略</p>
+
+<ul>
+  <li>直接写入（write-through）：修改缓存block，并直接更新memory</li>
+  <li>回写（write back)：先修改缓存block，然后这个block被替换时，判断dirty bit（修改位），然后将修改后的block传给memory</li>
+</ul>
+
+<p>2，缓存未命中所写block：两种策略</p>
+
+<ul>
+  <li>写-分配(write-allocate)：先把要修改的block加载到缓存在修改</li>
+  <li>写-不分配(No- write-allocate)：直接在memory中修改数据</li>
+</ul>
+
+<p>一般使用的是：Write-back + Write-allocate</p>
+
+<h3 id="缓存层次结构">缓存层次结构</h3>
+
+<p><a href="https://imgchr.com/i/y6MfxK"><img src="https://s3.ax1x.com/2021/02/15/y6MfxK.png" alt="y6MfxK.png" /></a></p>
+
+<p>缓存性能测试：</p>
+
+<ul>
+  <li>未命中率：一般非常低，比如L1级为3-10%，L2级不到1%</li>
+  <li>命中时间：4-10 clock cycles</li>
+  <li>未命中损失：50-200</li>
+  <li>未命中损失很大，通常99%和97%命中率，性能差2倍</li>
+</ul>
+
+<h3 id="编写缓存友好的代码">编写缓存友好的代码</h3>
+
+<ul>
+  <li>让最常用的命令（内循环）能够快速访问</li>
+  <li>需要1，在内循环中，把经常用的数据定义成局部变量，因为局部变量一般放在寄存器中。2，每次循环跨距为1，也可以提高局部性，从而增加命中率。比如跨距为1比跨距为2的命中率大2倍。</li>
+  <li>通过对缓存的题解，可以量化我们的局部性。</li>
+</ul>
+
+<h3 id="存储器山">存储器山</h3>
+
+<p><a href="https://imgchr.com/i/y6MTVH"><img src="https://s3.ax1x.com/2021/02/15/y6MTVH.png" alt="y6MTVH.png" /></a></p>
+
+<p>吞吐量（Read Throughput）：每秒钟能处理多少数据</p>
+
+<p>Stride：步长，Size：数据量大小</p>
+
+<p>可以发现当步长越小，数据量越小，吞吐量越大。</p>
+
+<h3 id="改变内层循环的空间局部性">改变内层循环的空间局部性</h3>
+
+<p>背景：对N*N的矩阵做内积，一共需要N^3次操作，具体代码如下：</p>
+
+<p><a href="https://imgchr.com/i/y6M4KO"><img src="https://s3.ax1x.com/2021/02/15/y6M4KO.png" alt="y6M4KO.png" /></a></p>
+
+<p>一共有三层循环（ijk)，最内层循环需要访问矩阵A和矩阵B，其访问方式如下所示：</p>
+
+<p><a href="https://imgchr.com/i/y6M5rD"><img src="https://s3.ax1x.com/2021/02/15/y6M5rD.png" alt="y6M5rD.png" /></a></p>
+
+<p>假设一个block只能存放四个double，则每一次循环，A的miss率为四分之一，而B的Miss率为百分之百，一共为1.25</p>
+
+<p>当改变内层循环的数据访问方式，提高空间局部性，如下所示：</p>
+
+<p><a href="https://imgchr.com/i/y6MIqe"><img src="https://s3.ax1x.com/2021/02/15/y6MIqe.png" alt="y6MIqe.png" /></a></p>
+
+<p>此时(kij)，miss rate降低，虽然此时在内层循环会增加write操作，（上面ijk的sum存在寄存器，不考虑write），但是通常来说，<strong>write操作对性能的影响更小</strong>，因为write操作是可以延后处理的。</p>
+
+<p><a href="https://imgchr.com/i/y6M7ad"><img src="https://s3.ax1x.com/2021/02/15/y6M7ad.png" alt="y6M7ad.png" /></a></p>
+
+<p>可以看到改变循环顺序，性能会发生很大的变化。</p>
+
+<h3 id="使用分块技术提高时间局部性">使用分块技术提高时间局部性</h3>
+
+<p>大致思路为，将程序中的数据结构组织成大的片（chunk），并能使一个片再加到L1，能够在这个片中进行所有的读写，完成后扔掉这个片。</p>
+
+<p>分块会使程序变得难以理解。</p>
+
+</article>
+      </div>
+    </main>
+
+    
+  </body>
+</html>

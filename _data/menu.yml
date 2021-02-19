@@ -1,0 +1,53 @@
+# For documentation on this file, see:
+# https://github.com/riggraz/no-style-please#customize-the-menu
+
+entries:
+  - title: info
+    entries:
+      - title: 张铁的个人博客，主要记录计算机基础，算法，项目方面的笔记
+      - title: my github
+        url: https://github.com/tietietietie
+
+  - title: all posts
+    post_list:
+      limit: 10
+      show_more: true
+      show_more_text: See archive...
+      show_more_url: archive.html
+
+  - title: posts by category
+    entries:
+      - title: 计算机基础
+        post_list:
+          limit: 3
+          category: 计算机基础
+          show_more: true
+          show_more_text: See more posts...
+          show_more_url: 计算机基础-archive.html
+      - title: 算法题
+        post_list:
+          limit: 3
+          category: 算法
+          show_more: true
+          show_more_text: See more posts...
+          show_more_url: 算法-archive.html
+      - title: 项目
+        post_list:
+          limit: 3
+          category: 项目
+          show_more: true
+          show_more_text: See more posts...
+          show_more_url: 项目-archive.html
+          
+
+  # - title: rss
+  #   url: feed.xml
+  
+  - title: Online Reading
+    entries:
+      - title: 霜神的算法笔记
+        url: https://books.halfrost.com/leetcode/
+      - title: labuladong算法笔记
+        url: https://labuladong.gitbook.io/algo/
+      - title: 走向分布式
+        url: http://dcaoyuan.github.io/papers/pdfs/Scalability.pdf

@@ -1,0 +1,1634 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.8.7">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2021-02-19T14:16:37+08:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">tie’s blog</title><subtitle>好好吃饭好好睡觉
+</subtitle><author><name>zhangtie</name></author><entry><title type="html">CSAPP笔记：系统IO</title><link href="http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html" rel="alternate" type="text/html" title="CSAPP笔记：系统IO" /><published>2020-04-23T08:43:00+08:00</published><updated>2020-04-23T08:43:00+08:00</updated><id>http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7IO</id><content type="html" xml:base="http://localhost:4000/%E7%B3%BB%E7%BB%9F%E7%BA%A7io.html">&lt;h1 id=&quot;系统级io&quot;&gt;系统级I/O&lt;/h1&gt;
+
+&lt;h2 id=&quot;unix-io&quot;&gt;Unix I/O&lt;/h2&gt;
+
+&lt;h3 id=&quot;概述&quot;&gt;概述&lt;/h3&gt;
+
+&lt;p&gt;低等级的I/0，在Linux系统中，文件就是一系列的字符串，并且所有的I/O设备，比如disk/terminal/socket，都被看作是文件。甚至连内核kernel，都被看做是文件。&lt;/p&gt;
+
+&lt;p&gt;通过简单的打开，关闭，读，写等接口，open(),close(),read(),write()等，对文件（也就是这些I/O设备）进行操作。&lt;/p&gt;
+
+&lt;p&gt;当前文件位置：有一个指向当前文件中某一位置的指针K（current file position），帮助我们定位。（当前，那些terminal比如socket,type..没有此指针，因为是数据流）&lt;/p&gt;
+
+&lt;h3 id=&quot;文件类型&quot;&gt;文件类型&lt;/h3&gt;
+
+&lt;p&gt;每个文件都有自己的唯一类型，常见包括：1，常规文件：随机信息。2，目录文件：指向文件的一组索引。3，socket：可以和其他机器的进程交换数据。4，管道：不同进程之间交换数据。&lt;/p&gt;
+
+&lt;h4 id=&quot;常规文件&quot;&gt;常规文件&lt;/h4&gt;
+
+&lt;p&gt;应用程序（非os），可以区分这些常规文件类型，包括文本文件（ASCII/Unicode），二进制文件（图片，.o，声音，视频）&lt;/p&gt;
+
+&lt;p&gt;其中，文本文件就是一系列的行组成的，不同操作系统用不同的行结束符，linux/mac，使用’\n’也就是0xa，也就是ASCII中的LF（Line fead），windows中，行结束符包括两个：CR：表示回车+LF：表示换行。&lt;/p&gt;
+
+&lt;h4 id=&quot;目录文件&quot;&gt;目录文件&lt;/h4&gt;
+
+&lt;p&gt;包含了一个”链接”数组。每一个链接指向一个文件名&lt;/p&gt;
+
+&lt;p&gt;每个个目录文件至少包含有两条link，其中.(dot)表示当前目录本身，..(dot dot)表示父目录&lt;/p&gt;
+
+&lt;p&gt;操作目录：mkdir:创建空目录，ls：查看目录内容，rmdir：删除空目录&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMjdf&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMjdf.png&quot; alt=&quot;yfMjdf.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;目录层次结构如上所示。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMXeP&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMXeP.png&quot; alt=&quot;yfMXeP.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以使用绝对路径名和相对路径名来访问hello.c&lt;/p&gt;
+
+&lt;h3 id=&quot;操作文件&quot;&gt;操作文件&lt;/h3&gt;
+
+&lt;h4 id=&quot;打开文件&quot;&gt;打开文件&lt;/h4&gt;
+
+&lt;p&gt;使用open(“路径名”，选项)：选项包括RDONLY（只读）oppend（从尾部开始）等&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;注意：调用系统函数一定要检查返回值&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;fd: file descriptor：文件描述符，每打开一个文件对应一个fd，系统有限制最多打开的文件数，如fd&amp;lt;=1024&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMLLt&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMLLt.png&quot; alt=&quot;yfMLLt.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;关闭文件&quot;&gt;关闭文件&lt;/h4&gt;
+
+&lt;p&gt;也需要检查错误，因为在线程？？共享内存（数据）时，可能出现两个进程关闭同一个文件，从而一个进程会关闭已经关闭的文件，从而报错。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMqsI&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMqsI.png&quot; alt=&quot;yfMqsI.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;读取文件&quot;&gt;读取文件&lt;/h4&gt;
+
+&lt;p&gt;返回值有三种情况：0，表示读取到文件结束符（文件读完了），&amp;lt;0，表示没有读取到文件（报错），&amp;gt;0，表示读取到的字节数&lt;/p&gt;
+
+&lt;p&gt;会出现short counts：读取到的文件量比我们设置的要少&lt;/p&gt;
+
+&lt;p&gt;在一些terminal（shell?socket)：会先读取一定量的字节,然后再让OS read？&lt;/p&gt;
+
+&lt;p&gt;通过改变current file position K表示我们读到哪里了&lt;/p&gt;
+
+&lt;p&gt;可以指定我们要读多少数，不一定buf[512]全部读满&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMTRH&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMTRH.png&quot; alt=&quot;yfMTRH.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;写入文件&quot;&gt;写入文件&lt;/h4&gt;
+
+&lt;p&gt;指定需要写入的文件（fd），然后在文件的current file position开始写入我们的数据。和read()类似，我们需指定要写入的字节数，也会出现写入的字计数比我们想要的少的情况。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMoJe&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMoJe.png&quot; alt=&quot;yfMoJe.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;读写举例&quot;&gt;读写举例&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMhdK&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMhdK.png&quot; alt=&quot;yfMhdK.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;非常糟糕的代码：一直在不断调用系统函数，所以一直在上下文切换，context switch会花费20000~40000个机器周期（使用strace可以追踪system call）&lt;/p&gt;
+
+&lt;h4 id=&quot;short-counts&quot;&gt;short counts&lt;/h4&gt;
+
+&lt;p&gt;通常在terminal读取数据，以及在socket读取或者写入数据时，会出现short counts，我们需要&lt;strong&gt;健壮的I/O接口&lt;/strong&gt;来处理short counts。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMIiD&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMIiD.png&quot; alt=&quot;yfMIiD.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;健壮的io文件包rio&quot;&gt;健壮的I/O文件包(RIO)&lt;/h2&gt;
+
+&lt;p&gt;是系统I/O的包装（wrappers），能够对short counts(读写不足？)提供有效的解决方式。&lt;/p&gt;
+
+&lt;p&gt;提供两种类型的函数：没有缓存的input和output函数，有缓存的读取函数（input/read）&lt;/p&gt;
+
+&lt;h3 id=&quot;unbuffered-rio&quot;&gt;Unbuffered RIO&lt;/h3&gt;
+
+&lt;p&gt;没有缓冲的函数和unix的IO类型，不同点在于，rio_readn会一直读取直到EOF。rio_writen将不会发生写入不足（永久等待？）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfM4IO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfM4IO.png&quot; alt=&quot;yfM4IO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;理解源码！（&lt;a href=&quot;caspp.cs.cmu.edu/3e/code.html&quot;&gt;记得看RIO的全部源码&lt;/a&gt;）&lt;/p&gt;
+
+&lt;h3 id=&quot;buffered-rio-input&quot;&gt;Buffered RIO input&lt;/h3&gt;
+
+&lt;p&gt;在读取文件时使用，会预先读取一段文件存入buffer（其中有没有被user读的文件），当Buffer的文件全部读完后，在调用unix I/0读取文件，从而减少系统调用次数。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMfZ6&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMfZ6.png&quot; alt=&quot;yfMfZ6.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;初始化buffered-rio&quot;&gt;初始化buffered RIO&lt;/h4&gt;
+
+&lt;p&gt;所有buffered IO的信心都存在一个struct里面，其中有这段buffer的描述符，待读的字节量，指向下一个待读字节的指针，buffer的容量等等信息&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMwZV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMwZV.png&quot; alt=&quot;yfMwZV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;buffered-io举例&quot;&gt;Buffered IO举例&lt;/h4&gt;
+
+&lt;p&gt;注意RIO包中常见函数的用法&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfM0aT&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfM0aT.png&quot; alt=&quot;yfM0aT.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;元数据文件共享重定向&quot;&gt;元数据/文件共享/重定向&lt;/h3&gt;
+
+&lt;h4 id=&quot;元数据&quot;&gt;元数据&lt;/h4&gt;
+
+&lt;p&gt;包含某个文件的信息，为struct形式，由kernal管理，每个文件都有，可以通过stat函数访问.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMriF&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMriF.png&quot; alt=&quot;yfMriF.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;调用stat函数，可以复制stat中的信息，还能得到文件路径名:stat(“filepath”,&amp;amp;stat)；&lt;/p&gt;
+
+&lt;h4 id=&quot;文件共享&quot;&gt;文件共享&lt;/h4&gt;
+
+&lt;p&gt;每个进程中都有一个描述符表，表示此进程中打开的文件。&lt;/p&gt;
+
+&lt;p&gt;每个打开的文件，都会有一个“打开文件表”，由内核管理&lt;/p&gt;
+
+&lt;p&gt;每个“打开文件表”中都包含1，文件的基本信息，比如上面的struct。2，file position k，3.refcnt：被引用的进程个数&lt;/p&gt;
+
+&lt;p&gt;虚拟节点（v-node）中保存着文件的基本信息，无论文件打开还是关闭着，都存在那里。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yfMBIU&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/19/yfMBIU.png&quot; alt=&quot;yfMBIU.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;注意：一个进程可以打开两次相同文件，得到两个不同的文件描述符，也会产生两个不同的“打开文件表”，这两个表中的file pos不一样，如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Dzhn&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Dzhn.png&quot; alt=&quot;y2Dzhn.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;使用fork：会复制一份一模一样的“描述符表”，指向形同的“打开文件表”，只是其中的refcnt+1.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2rFnU&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2rFnU.png&quot; alt=&quot;y2rFnU.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;文件重定向&quot;&gt;文件重定向&lt;/h4&gt;
+
+&lt;p&gt;使用dup2()函数，修改“描述符表”中表项，让标准输出的fd1指向我们想重定向的目标文件，&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2rCcV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2rCcV.png&quot; alt=&quot;y2rCcV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发向，fd1中存的表项由a变成b，从而输出变为b，具体变化图如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2rPXT&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2rPXT.png&quot; alt=&quot;y2rPXT.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2rkBF&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2rkBF.png&quot; alt=&quot;y2rkBF.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：refcnt变成了2，也就是说就算是同一进程，也能修改表项，使得一个open file table被指向两次，所以也要&lt;strong&gt;关闭两次&lt;/strong&gt;，所有使用dup2也容易产生bug（和fork一样得小心使用）&lt;/p&gt;
+
+&lt;h3 id=&quot;标准库中的io&quot;&gt;标准库中的I/O&lt;/h3&gt;
+
+&lt;p&gt;与RIO类型，也是使用的buffer，但是比RIO提供了更多的功能，如下图表示其关系：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2rA74&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2rA74.png&quot; alt=&quot;y2rA74.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如何选择呢：&lt;/p&gt;
+
+&lt;p&gt;1，尽量是使用standard和RIO，而不是Unix IO,除非是写signal handler（因为fprint等不是异步信息安全的）&lt;/p&gt;
+
+&lt;p&gt;2，在处理terminal/disk文件时，使用standard IO，在处理网络socket文件时，使用RIO，因为标准IO没有对socket文件做出优化。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">系统级I/O Unix I/O 概述 低等级的I/0，在Linux系统中，文件就是一系列的字符串，并且所有的I/O设备，比如disk/terminal/socket，都被看作是文件。甚至连内核kernel，都被看做是文件。 通过简单的打开，关闭，读，写等接口，open(),close(),read(),write()等，对文件（也就是这些I/O设备）进行操作。 当前文件位置：有一个指向当前文件中某一位置的指针K（current file position），帮助我们定位。（当前，那些terminal比如socket,type..没有此指针，因为是数据流） 文件类型 每个文件都有自己的唯一类型，常见包括：1，常规文件：随机信息。2，目录文件：指向文件的一组索引。3，socket：可以和其他机器的进程交换数据。4，管道：不同进程之间交换数据。 常规文件 应用程序（非os），可以区分这些常规文件类型，包括文本文件（ASCII/Unicode），二进制文件（图片，.o，声音，视频） 其中，文本文件就是一系列的行组成的，不同操作系统用不同的行结束符，linux/mac，使用’\n’也就是0xa，也就是ASCII中的LF（Line fead），windows中，行结束符包括两个：CR：表示回车+LF：表示换行。 目录文件 包含了一个”链接”数组。每一个链接指向一个文件名 每个个目录文件至少包含有两条link，其中.(dot)表示当前目录本身，..(dot dot)表示父目录 操作目录：mkdir:创建空目录，ls：查看目录内容，rmdir：删除空目录 目录层次结构如上所示。 可以使用绝对路径名和相对路径名来访问hello.c 操作文件 打开文件 使用open(“路径名”，选项)：选项包括RDONLY（只读）oppend（从尾部开始）等 注意：调用系统函数一定要检查返回值 fd: file descriptor：文件描述符，每打开一个文件对应一个fd，系统有限制最多打开的文件数，如fd&amp;lt;=1024 关闭文件 也需要检查错误，因为在线程？？共享内存（数据）时，可能出现两个进程关闭同一个文件，从而一个进程会关闭已经关闭的文件，从而报错。 读取文件 返回值有三种情况：0，表示读取到文件结束符（文件读完了），&amp;lt;0，表示没有读取到文件（报错），&amp;gt;0，表示读取到的字节数 会出现short counts：读取到的文件量比我们设置的要少 在一些terminal（shell?socket)：会先读取一定量的字节,然后再让OS read？ 通过改变current file position K表示我们读到哪里了 可以指定我们要读多少数，不一定buf[512]全部读满 写入文件 指定需要写入的文件（fd），然后在文件的current file position开始写入我们的数据。和read()类似，我们需指定要写入的字节数，也会出现写入的字计数比我们想要的少的情况。 读写举例 非常糟糕的代码：一直在不断调用系统函数，所以一直在上下文切换，context switch会花费20000~40000个机器周期（使用strace可以追踪system call） short counts 通常在terminal读取数据，以及在socket读取或者写入数据时，会出现short counts，我们需要健壮的I/O接口来处理short counts。 健壮的I/O文件包(RIO) 是系统I/O的包装（wrappers），能够对short counts(读写不足？)提供有效的解决方式。 提供两种类型的函数：没有缓存的input和output函数，有缓存的读取函数（input/read） Unbuffered RIO 没有缓冲的函数和unix的IO类型，不同点在于，rio_readn会一直读取直到EOF。rio_writen将不会发生写入不足（永久等待？） 理解源码！（记得看RIO的全部源码） Buffered RIO input 在读取文件时使用，会预先读取一段文件存入buffer（其中有没有被user读的文件），当Buffer的文件全部读完后，在调用unix I/0读取文件，从而减少系统调用次数。 初始化buffered RIO 所有buffered IO的信心都存在一个struct里面，其中有这段buffer的描述符，待读的字节量，指向下一个待读字节的指针，buffer的容量等等信息 Buffered IO举例 注意RIO包中常见函数的用法 元数据/文件共享/重定向 元数据 包含某个文件的信息，为struct形式，由kernal管理，每个文件都有，可以通过stat函数访问. 调用stat函数，可以复制stat中的信息，还能得到文件路径名:stat(“filepath”,&amp;amp;stat)； 文件共享 每个进程中都有一个描述符表，表示此进程中打开的文件。 每个打开的文件，都会有一个“打开文件表”，由内核管理 每个“打开文件表”中都包含1，文件的基本信息，比如上面的struct。2，file position k，3.refcnt：被引用的进程个数 虚拟节点（v-node）中保存着文件的基本信息，无论文件打开还是关闭着，都存在那里。 注意：一个进程可以打开两次相同文件，得到两个不同的文件描述符，也会产生两个不同的“打开文件表”，这两个表中的file pos不一样，如下图所示： 使用fork：会复制一份一模一样的“描述符表”，指向形同的“打开文件表”，只是其中的refcnt+1. 文件重定向 使用dup2()函数，修改“描述符表”中表项，让标准输出的fd1指向我们想重定向的目标文件， 可以发向，fd1中存的表项由a变成b，从而输出变为b，具体变化图如下： 可以发现：refcnt变成了2，也就是说就算是同一进程，也能修改表项，使得一个open file table被指向两次，所以也要关闭两次，所有使用dup2也容易产生bug（和fork一样得小心使用） 标准库中的I/O 与RIO类型，也是使用的buffer，但是比RIO提供了更多的功能，如下图表示其关系： 如何选择呢： 1，尽量是使用standard和RIO，而不是Unix IO,除非是写signal handler（因为fprint等不是异步信息安全的） 2，在处理terminal/disk文件时，使用standard IO，在处理网络socket文件时，使用RIO，因为标准IO没有对socket文件做出优化。</summary></entry><entry><title type="html">CSAPP笔记：虚拟内存-系统</title><link href="http://localhost:4000/%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98.html" rel="alternate" type="text/html" title="CSAPP笔记：虚拟内存-系统" /><published>2020-04-17T16:42:00+08:00</published><updated>2020-04-17T16:42:00+08:00</updated><id>http://localhost:4000/%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98</id><content type="html" xml:base="http://localhost:4000/%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98.html">&lt;h1 id=&quot;虚拟内存系统&quot;&gt;虚拟内存：系统&lt;/h1&gt;
+
+&lt;h2 id=&quot;简单系统中实现地址转换&quot;&gt;简单系统中实现地址转换&lt;/h2&gt;
+
+&lt;h3 id=&quot;前提条件&quot;&gt;前提条件&lt;/h3&gt;
+
+&lt;p&gt;VA：14位，PA：12位，page size：64字节，也就是6位&lt;/p&gt;
+
+&lt;p&gt;如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wVzT&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wVzT.png&quot; alt=&quot;y2wVzT.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;TLB：16个条目，4-way&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wAJ0&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wAJ0.png&quot; alt=&quot;y2wAJ0.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;page table：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2djRf&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2djRf.png&quot; alt=&quot;y2djRf.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;cache：16个set，直接匹配（没有Line），每个block 四个字节，所以有两位存储block offset(co)&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wion&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wion.png&quot; alt=&quot;y2wion.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;地址转换举例&quot;&gt;地址转换举例&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wEWV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wEWV.png&quot; alt=&quot;y2wEWV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如图：MMU得到VA后，再TLB中利用VPN找到了对应的的PTE，从而得到的PPN，发送给内存（cache），cache根据PA，找到了对应的数据为0x36。如何找缓存的数据（根据CT：tag：确定是否存在，以及在哪列，CI：set：确定set，CO：确定block的偏移量）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wkiq&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wkiq.png&quot; alt=&quot;y2wkiq.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;上图的VA没有在TLB中找到PTE，但是在Page table中找到了PTE，从而确定了PPN，得到PA，根据PA发生了cache miss，接着在主存中寻找。&lt;/p&gt;
+
+&lt;h2 id=&quot;举例core-i7linux的内存结构&quot;&gt;举例：core i7/Linux的内存结构&lt;/h2&gt;
+
+&lt;h3 id=&quot;i7的物理内存结构&quot;&gt;i7的物理内存结构&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wSsg&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wSsg.png&quot; alt=&quot;y2wSsg.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;注意的点：1，L1级缓存分为指令缓存和数据缓存。2，L1级缓存的大小收到限制，因为VPO = PPO = CI + CO，一般CO是有限制的，VPO也是有限制的，所以set数量有限制，从而缓存大小有限制。&lt;/p&gt;
+
+&lt;h3 id=&quot;地址转换过程&quot;&gt;地址转换过程&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wPds&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wPds.png&quot; alt=&quot;y2wPds.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：&lt;/p&gt;
+
+&lt;p&gt;1，VA中的VPO = PPO = CI+CO：所有在转换过程中，可以先把VPO传给缓存L1，缓存根据CI找出对应的set，以及读取8个tag，MMU转换完VPN输出PPN后，得到Tag与8个tag比较。（virtual indexed, physically tagged)(需要仔细设置缓存大小)&lt;/p&gt;
+
+&lt;p&gt;2，得到的数据（result）是32位或者64位的。&lt;/p&gt;
+
+&lt;p&gt;3，PPN竟然比VPN大。&lt;/p&gt;
+
+&lt;h3 id=&quot;pte图解&quot;&gt;PTE图解&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2dzQS&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2dzQS.png&quot; alt=&quot;y2dzQS.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：MMU规定了每个页面（或子页表）的权限（读些/内核等等），其中page table physical base address：为下一个子页表的起始地址或者物理地址（最重要，40位）&lt;/p&gt;
+
+&lt;p&gt;MMU的地址转换过程如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2dvz8&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2dvz8.png&quot; alt=&quot;y2dvz8.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：CR3存放的是第一级页表的起始地址，接着，根据VPN分段，可以一级级的查找到所需要的PTE。&lt;/p&gt;
+
+&lt;h3 id=&quot;linux虚拟内存结构&quot;&gt;Linux虚拟内存结构&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wbXF&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wbXF.png&quot; alt=&quot;y2wbXF.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Linux中所有进程的虚拟内存地址都是从0x00400000开始的&lt;/li&gt;
+  &lt;li&gt;VM中分成两个部分：当前进程的虚拟内存，储存着用户的代码和数据，地址的前12位是0，内核的虚拟内存，存储着内核的代码和数据，地址前12位是1。&lt;/li&gt;
+  &lt;li&gt;用户区和内核区中间有间隙，没有画出来&lt;/li&gt;
+  &lt;li&gt;内核部分：分为每个进程共享的内核数据和代码，以及该进程独有的数据（比如page table一级页表表头，mm_struct：将用户区分成不同的area），即该进程的上下文。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;linux将虚拟内存分区域管理&quot;&gt;Linux将虚拟内存分区域管理&lt;/h3&gt;
+
+&lt;p&gt;在Kernal的task_struct区域，存储着该进程的上下文，其中pdg：指向该进程的一级页表表头，mmap:存储着各区域的信息，见下图：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2w7lT&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2w7lT.png&quot; alt=&quot;y2w7lT.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：mmap是指向vm_area_struct的链表（or红黑树）,struct中存储着某一区域的信息，比如区域的范围，区域的读写权限，区域是共享还是独有。&lt;/p&gt;
+
+&lt;h3 id=&quot;linux内核处理缺页中断&quot;&gt;Linux内核处理缺页中断&lt;/h3&gt;
+
+&lt;p&gt;当MMU没有找到有效的PTE后，会发出缺页中断，控制权交给kernal，kernal的处理方式分为三种：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;查找该VA是否在area，如果不在，说明不存在所需的page。&lt;/li&gt;
+  &lt;li&gt;如果VA指向的是area区域，但是该区域的权限不足，也发出protection exception&lt;/li&gt;
+  &lt;li&gt;常见的缺页中断是：当前VA是在合理的aera，只是uncached（没有缓存到PM），此时从磁盘取出所需page到PM即可。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wH6U&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wH6U.png&quot; alt=&quot;y2wH6U.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;内存映射&quot;&gt;内存映射&lt;/h2&gt;
+
+&lt;h3 id=&quot;定义&quot;&gt;定义&lt;/h3&gt;
+
+&lt;p&gt;内存映射是指：Linux内核通过将虚拟内存区域与磁盘上的对象关联起来，以初始化这个虚拟内存区域的内容，这个过程称为内存映射。内存映射根据对象的不同，可以分为两种：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Linux文件系统中的普通文件：将VM中的area和普通的磁盘文件映射，实现area的初始化，但是这些VP并没有进入到PM中，按需调度即可。&lt;/li&gt;
+  &lt;li&gt;匿名文件：由内核创建，表示这个area已经被映射，但是也不存在于PM或者任何地方，只有当需要调用此VP时，内核在PM中牺牲掉合适的PP，然后用这个VP覆盖，此时PM中的这个页面，全部为0。（此过程PM和磁盘没有数据传输），所以这些被映射到匿名文件的VP，有时候也叫做demanding-zero page/请求二进制零的页。这些VP被初始化后，会在内核专门维护的swap file/交换文件（也称为交换空间或者交换区域）中换来换去。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;共享对象&quot;&gt;共享对象&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wTpV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wTpV.png&quot; alt=&quot;y2wTpV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：两个进程的不同段的虚拟地址，被映射到了相同的object（共享对象）&lt;/p&gt;
+
+&lt;h3 id=&quot;私有的写时复制对象&quot;&gt;私有的写时复制对象&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wIf0&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wIf0.png&quot; alt=&quot;y2wIf0.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：两个进程被映射到同一个object，但是这个object是&lt;strong&gt;私有写时复制（COW）&lt;/strong&gt;的，而对应的PTE也被&lt;strong&gt;标记为只读&lt;/strong&gt;，如果不进行写操作，这个对象可以看成共享对象，但是有进程要改写该对象时，会复制一段新的对象出来：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2w4kn&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2w4kn.png&quot; alt=&quot;y2w4kn.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：当试图对private COW对象进行写操作，会触发protection fault，此后内核会复制出一段可供写的代码段，并对process 2进行重新映射。&lt;/p&gt;
+
+&lt;h3 id=&quot;fork函数&quot;&gt;Fork函数&lt;/h3&gt;
+
+&lt;p&gt;VM以及内存映射机制，解释了为什么进行fork，可以得到私有的地址空间，并不会占用太多的内存资源。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;为新进程创建VM的步骤&lt;/strong&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;从父进程中复制相同的mm_strcut，vm_area_struct和页表&lt;/li&gt;
+  &lt;li&gt;页面都被标记成只读&lt;/li&gt;
+  &lt;li&gt;每个area都被标记为private COW。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;这样子进程和父进程的VM和objects完全相同，如果不进行写操作，则共享对象，如果写操作，则复制后再写（copy on write）&lt;/p&gt;
+
+&lt;h3 id=&quot;execve函数&quot;&gt;execve函数&lt;/h3&gt;
+
+&lt;p&gt;通过execve函数，可以在原有的进程中加载新程序，具体过程如下：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;释放原来的page table和vm_area_struct。&lt;/li&gt;
+  &lt;li&gt;加载.out文件，进行area的映射，从而创建了新的页表和vm_area_struct，创建规则见下图&lt;/li&gt;
+  &lt;li&gt;为VM建立映射后，PC开始逐条执行语句，按需将VP加载到PP。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wfTs&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wfTs.png&quot; alt=&quot;y2wfTs.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：映射分成两种：一种是file-backed，一种是damand-zero&lt;/p&gt;
+
+&lt;h4 id=&quot;用户级内存映射&quot;&gt;用户级内存映射&lt;/h4&gt;
+
+&lt;p&gt;使用系统函数mmap，可以在VM空间指定一段长度，对目标文件fd的offset位置开始，进行映射，当flags被设置为MAP_ANON，则进行demand-zero映射。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wgOg&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wgOg.png&quot; alt=&quot;y2wgOg.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;注意：start为Kernal进行映射的VM起始地址，但只是我们的Hint，如果start部分不能进行映射，则返回的是kernal自己决定的映射起始地址。&lt;/p&gt;
+
+&lt;p&gt;注意：仅仅是映射！没有任何实际数据的复制！只有我们读取该VA处数据时，才会将文件中的地址加载到PM中&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;举例&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wc6S&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wc6S.png&quot; alt=&quot;y2wc6S.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;通过mmap，直接把&lt;strong&gt;file中的文件映射到了VM的bufp地址处&lt;/strong&gt;，然后再写入stdout。（不需要读取）&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">虚拟内存：系统</summary></entry><entry><title type="html">CSAPP笔记：虚拟内存-概念</title><link href="http://localhost:4000/%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98.html" rel="alternate" type="text/html" title="CSAPP笔记：虚拟内存-概念" /><published>2020-04-16T16:23:00+08:00</published><updated>2020-04-16T16:23:00+08:00</updated><id>http://localhost:4000/%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98</id><content type="html" xml:base="http://localhost:4000/%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98.html">&lt;h1 id=&quot;虚拟内存概念&quot;&gt;虚拟内存：概念&lt;/h1&gt;
+
+&lt;h2 id=&quot;地址空间&quot;&gt;地址空间&lt;/h2&gt;
+
+&lt;h3 id=&quot;两种不同系统&quot;&gt;两种不同系统&lt;/h3&gt;
+
+&lt;p&gt;有一些系统如汽车，电梯内的控制设备，系统较简单，使用的是直接物理地址，CPU访问内存（main memory）时直接使用物理地址（physical address,PA),如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wySf&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wySf.png&quot; alt=&quot;y2wySf.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;服务器或者电脑上的系统，CPU访问内存时，使用的是虚拟地址（virtual address,VA），把VA发送给MMU（内存管理单元），进行地址转换（address translation），生成了PA，在从内存中取数据，发送给CPU。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wrfP&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wrfP.png&quot; alt=&quot;y2wrfP.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;地址空间术语&quot;&gt;地址空间术语&lt;/h3&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;地址空间：整数地址的集合&lt;/li&gt;
+  &lt;li&gt;线性地址空间：连续的非负整数地址集合&lt;/li&gt;
+  &lt;li&gt;虚拟地址空间：大小为2^n的连续地址空间&lt;/li&gt;
+  &lt;li&gt;物理地址空间：大小为2^m的连续地址空间&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;一般来说，n&amp;gt;m&lt;/p&gt;
+
+&lt;h3 id=&quot;为什么要使用虚拟内存&quot;&gt;为什么要使用虚拟内存？&lt;/h3&gt;
+
+&lt;p&gt;每次访问内存，都需要经过MMU来转换，这样难道不会降低效率吗？首先理解虚拟化：&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;虚拟化&lt;/strong&gt;是指拦截对某个资源的访问权限，提供对资源的抽象，对用户展现不同视图，比如磁盘，通过磁盘管理器的虚拟化，CPU看到的只是连续的逻辑块，而不是磁盘，磁道这些物理设备，对磁盘的读写操作，被磁盘管理器拦截。&lt;/p&gt;
+
+&lt;p&gt;使用虚拟内存的优点&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;能够更有效率的使用DRAM（因为DRAM也就是主存，称为了VM的cache）&lt;/li&gt;
+  &lt;li&gt;能够简化内存管理（每个进程都有相似的连续地址空间）&lt;/li&gt;
+  &lt;li&gt;能够帮助我们分离地址空间，实现数据保护（不同进程的虚拟内存是不一样的，用户程序不能访问内核的代码和数据）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;虚拟内存作为缓存的工具&quot;&gt;虚拟内存作为缓存的工具&lt;/h2&gt;
+
+&lt;h3 id=&quot;虚拟内存和物理内存&quot;&gt;虚拟内存和物理内存&lt;/h3&gt;
+
+&lt;p&gt;VM：长度为N的连续地址，存在磁盘上&lt;/p&gt;
+
+&lt;p&gt;PM：作为VM的缓存，存在DRAM上&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wwTA&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wwTA.png&quot; alt=&quot;y2wwTA.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：&lt;/p&gt;
+
+&lt;p&gt;VM被很多块，被称为页面（pages），其中VM中的称为虚拟页面VP，被缓存在PM中的块称为物理页面，PP。&lt;/p&gt;
+
+&lt;p&gt;页面的大小为2^p，通常比之前学到的缓存块大。（4096个字节，4kB）&lt;/p&gt;
+
+&lt;p&gt;同时VM上还有一些页面是空的，称为未分配(unallocated)，也有些分配了但是没被缓存的（uncached）。&lt;/p&gt;
+
+&lt;h3 id=&quot;dram缓存&quot;&gt;DRAM缓存&lt;/h3&gt;
+
+&lt;p&gt;DRAM作为缓存，会有很严重的未命中惩罚，因为从磁盘取数据非常慢，所以我们采取以下措施，来提高命中率&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;使用大的cache block，称为页面（4KB/4MB）&lt;/li&gt;
+  &lt;li&gt;完全关联性：任何的VP都有可能放在任何的PP，而不是像缓存那样有限制（需要map function）&lt;/li&gt;
+  &lt;li&gt;非常复杂的替换算法：为了尽量减少未命中，不能简单的使用缓存那样的LCU算法（而且是在软件级实现）&lt;/li&gt;
+  &lt;li&gt;不能使用直接写(write through)，使用回写（write back）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;页表&quot;&gt;页表&lt;/h3&gt;
+
+&lt;p&gt;页表是由页表项组成（page table entries（PET））组成，每一个页表项都对应着一个（VM,PM）对（有效位为1时）&lt;/p&gt;
+
+&lt;h4 id=&quot;页表命中&quot;&gt;页表命中&lt;/h4&gt;
+
+&lt;p&gt;当CPU所需的虚拟地址在页表中能找到对应的PET，此时便可在DRAM中找到对应物理地址，从而page hit!&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wdwd&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wdwd.png&quot; alt=&quot;y2wdwd.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;页缺失&quot;&gt;页缺失&lt;/h4&gt;
+
+&lt;p&gt;当CPU所需要的页面没有存放在DRAM中，发生了DRAM cache miss，如下图所示，当CPU要访问VP3时，有效位是0，此时会发生页缺失异常（page fault exception），控制权交给kernal的handler，handler选出DRAM中要被替换的PP（存在DRAM的VP）（此处选择VP4），然后PP3存放着VP3的数据，而VP4的PTE有效位为0，指向的是VM（也就是DISK）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wNOe&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wNOe.png&quot; alt=&quot;y2wNOe.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wDYt&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wDYt.png&quot; alt=&quot;y2wDYt.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;页面分配&quot;&gt;页面分配&lt;/h4&gt;
+
+&lt;p&gt;原本未分配的页面如VP5，给他分配磁盘空间（如使用malloc），此空间会指向disk，而不是DRAM！！&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wtyD&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wtyD.png&quot; alt=&quot;y2wtyD.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;局部性保证了虚拟内存性能&quot;&gt;局部性保证了虚拟内存性能！&lt;/h4&gt;
+
+&lt;p&gt;虚拟内存看上去会花费很多时间（每次都要查找PTE，还会引发demanding page），但是由于程序的局部性，程序总是趋向于访问一个&lt;strong&gt;较小的活动虚拟页面，称为工作集&lt;/strong&gt;，当工作集比主存小时，此进程会有很好的性能。但是当所有进程工作集的大小比主存大时，可能会出现抖动（thrashing）（经常出现page falut exception）&lt;/p&gt;
+
+&lt;h2 id=&quot;虚拟内存作为内存管理的工具&quot;&gt;虚拟内存作为内存管理的工具&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;每个进程都有自己的虚拟内存，从而每个进程都把内存空间看做时连续的线性序列。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wBFI&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wBFI.png&quot; alt=&quot;y2wBFI.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;虚拟内存能够简化内存的分配：因为任何的VP都能匹配（map）到任何的PP，而且VP在不同的时刻可以在不同的PP内。&lt;/li&gt;
+  &lt;li&gt;还能够实现多进程间数据共享，如上图的PP6（可能为lib.c），不需要复制，所有进程都能得到一份PP6内容的副本。&lt;/li&gt;
+  &lt;li&gt;能够简化“链接”和“加载”过程
+    &lt;ul&gt;
+      &lt;li&gt;链接过程变得容易：因为所有的虚拟内存空间都在相同的地方开始（地址空间相同）&lt;/li&gt;
+      &lt;li&gt;加载过程：让当前进程的PTEs无效（invalid），然后按需将新程序的.text和.data部分一页页地复制到当前进程地page table，从而实现当前进程能执行不同地程序。&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2waeH&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2waeH.png&quot; alt=&quot;y2waeH.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;虚拟内存作为内存保护的工具&quot;&gt;虚拟内存作为内存保护的工具&lt;/h2&gt;
+
+&lt;p&gt;PTE的每个条目之前都有一个“权限位”，说明目标PP是可读/可写/可执行等等。其中sup表示是内核程序还是用户程序。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wYQO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wYQO.png&quot; alt=&quot;y2wYQO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;地址转换&quot;&gt;地址转换&lt;/h2&gt;
+
+&lt;h3 id=&quot;常用术语&quot;&gt;常用术语&lt;/h3&gt;
+
+&lt;p&gt;虚拟地址空间V；物理地址空间P，地址转换MAP(a) = a’（由虚拟地址a转换位物理地址a’）&lt;/p&gt;
+
+&lt;p&gt;基本参数：&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;N：虚拟地址空间号&lt;/li&gt;
+  &lt;li&gt;M：物理地址空间号&lt;/li&gt;
+  &lt;li&gt;P：页大小&lt;/li&gt;
+  &lt;li&gt;VA组成：
+    &lt;ul&gt;
+      &lt;li&gt;TLB：&lt;/li&gt;
+      &lt;li&gt;TLBT&lt;/li&gt;
+      &lt;li&gt;VPN：虚拟页面号&lt;/li&gt;
+      &lt;li&gt;VPO：虚拟页面偏移量&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;PA组成：
+    &lt;ul&gt;
+      &lt;li&gt;PPN：物理页面号&lt;/li&gt;
+      &lt;li&gt;PPO：物理页面偏移量&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;利用page-table进行地址转换&quot;&gt;利用page table进行地址转换&lt;/h3&gt;
+
+&lt;p&gt;首先，当前进程有一个页面表指针存放在CR3这个寄存器中，用于页面表表项的查找，根据VPN，可以在页面表中查找到PPN（如果没有page fault的话)，而PPO和VPO是相同的，因为页面大小是相同的。&lt;/p&gt;
+
+&lt;p&gt;而且，偏移量位数位P，因为页面大小最多位P位&lt;strong&gt;，当偏移量超过P，会在VPN中增加一位&lt;/strong&gt;，表示进入了下一个页面。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2w8W6&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2w8W6.png&quot; alt=&quot;y2w8W6.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;地址转换过程page-hit&quot;&gt;地址转换过程：page hit&lt;/h3&gt;
+
+&lt;p&gt;可以发现PTE其实存在于主存或者缓存中，MMU先从主存或者缓存得到表项，然后计算出物理地址PA，再命令主存或者缓存将目标地址的数据发送给CPU。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2w3Jx&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2w3Jx.png&quot; alt=&quot;y2w3Jx.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;地址转换过程page-fault&quot;&gt;地址转换过程：page fault&lt;/h3&gt;
+
+&lt;p&gt;MMU得到的PTE发现有效位是0，引发了exception，挑选出victim（可能会回写），然后把需要的VP传到选好的PP，更新PTE，然后&lt;strong&gt;从新执行&lt;/strong&gt;那条指令&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wJSK&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wJSK.png&quot; alt=&quot;y2wJSK.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;地址转换过程缓存的作用&quot;&gt;地址转换过程：缓存的作用&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2w1F1&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2w1F1.png&quot; alt=&quot;y2w1F1.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：缓存只是主存的子集而已。&lt;/p&gt;
+
+&lt;h3 id=&quot;使用tlb加速地址转换&quot;&gt;使用TLB加速地址转换&lt;/h3&gt;
+
+&lt;p&gt;PTE条目存放在缓存中，存在着缓存未命中风险，就算缓存命中，也就很小的L1级缓存延迟，为了加速对PTE的访问时间，MMU内部有一个硬件级的缓存，存放着最近访问的PTE条目，称为TLB（translation lookaside buffer)&lt;/p&gt;
+
+&lt;p&gt;和访问主存的page table类似，也是使用VA的VPN作为索引来访问TLB，其中VPN分成了两部分，TLBI用于访问set，TLBT用于访问set中的某一列（跟普通的缓存一样的机制，也是&lt;strong&gt;硬件级的搜索&lt;/strong&gt;）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wMw9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wMw9.png&quot; alt=&quot;y2wMw9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;tlb命中&quot;&gt;TLB命中&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wmyF&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wmyF.png&quot; alt=&quot;y2wmyF.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：TLB命中时，减少了对内存的访问。&lt;/p&gt;
+
+&lt;h4 id=&quot;tlb未命中&quot;&gt;TLB未命中&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wnL4&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wnL4.png&quot; alt=&quot;y2wnL4.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：TLB未命中和普通的在内存中查找PTE类似，只是会把未命中PTE在TLB中更新。&lt;/p&gt;
+
+&lt;h3 id=&quot;page-table存储&quot;&gt;page table存储&lt;/h3&gt;
+
+&lt;p&gt;假设页大小为4k，也就是2^12 bytes，64位系统一个可用地址为2^48，假设每个地址需要一个8 bytes的PTE存储，则一共需要2^48 / 2^12 *2^3 = 2^39 bytes，也就是512G来存储页表，这显然是不现实的，因为&lt;strong&gt;绝大部分的VM都没有使用&lt;/strong&gt;，而不需要为这些没有使用的地址分配PTE。&lt;/p&gt;
+
+&lt;p&gt;解决办法：采用多级页表&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2wKeJ&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2wKeJ.png&quot; alt=&quot;y2wKeJ.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如上所示：存储一个VM，最终只用到了一个一级页表和3个二级页表，每个页表很小（4KB）。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;使用多级页表时，MMU如何找到所需的PTE呢？&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;把VP中的VPN分成K等分，每一等分都可以帮助我们在第i级页表中找到下一级页表的&lt;strong&gt;头指针&lt;/strong&gt;，最后一级页表，存的为所需的PTE，如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2weQU&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2weQU.png&quot; alt=&quot;y2weQU.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;系统用几级页表，由硬件确定，intel好像用的是4级。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">虚拟内存：概念 地址空间 两种不同系统 有一些系统如汽车，电梯内的控制设备，系统较简单，使用的是直接物理地址，CPU访问内存（main memory）时直接使用物理地址（physical address,PA),如下图所示： 服务器或者电脑上的系统，CPU访问内存时，使用的是虚拟地址（virtual address,VA），把VA发送给MMU（内存管理单元），进行地址转换（address translation），生成了PA，在从内存中取数据，发送给CPU。 地址空间术语 地址空间：整数地址的集合 线性地址空间：连续的非负整数地址集合 虚拟地址空间：大小为2^n的连续地址空间 物理地址空间：大小为2^m的连续地址空间 一般来说，n&amp;gt;m 为什么要使用虚拟内存？ 每次访问内存，都需要经过MMU来转换，这样难道不会降低效率吗？首先理解虚拟化： 虚拟化是指拦截对某个资源的访问权限，提供对资源的抽象，对用户展现不同视图，比如磁盘，通过磁盘管理器的虚拟化，CPU看到的只是连续的逻辑块，而不是磁盘，磁道这些物理设备，对磁盘的读写操作，被磁盘管理器拦截。 使用虚拟内存的优点 能够更有效率的使用DRAM（因为DRAM也就是主存，称为了VM的cache） 能够简化内存管理（每个进程都有相似的连续地址空间） 能够帮助我们分离地址空间，实现数据保护（不同进程的虚拟内存是不一样的，用户程序不能访问内核的代码和数据） 虚拟内存作为缓存的工具 虚拟内存和物理内存 VM：长度为N的连续地址，存在磁盘上 PM：作为VM的缓存，存在DRAM上 可以发现： VM被很多块，被称为页面（pages），其中VM中的称为虚拟页面VP，被缓存在PM中的块称为物理页面，PP。 页面的大小为2^p，通常比之前学到的缓存块大。（4096个字节，4kB） 同时VM上还有一些页面是空的，称为未分配(unallocated)，也有些分配了但是没被缓存的（uncached）。 DRAM缓存 DRAM作为缓存，会有很严重的未命中惩罚，因为从磁盘取数据非常慢，所以我们采取以下措施，来提高命中率 使用大的cache block，称为页面（4KB/4MB） 完全关联性：任何的VP都有可能放在任何的PP，而不是像缓存那样有限制（需要map function） 非常复杂的替换算法：为了尽量减少未命中，不能简单的使用缓存那样的LCU算法（而且是在软件级实现） 不能使用直接写(write through)，使用回写（write back） 页表 页表是由页表项组成（page table entries（PET））组成，每一个页表项都对应着一个（VM,PM）对（有效位为1时） 页表命中 当CPU所需的虚拟地址在页表中能找到对应的PET，此时便可在DRAM中找到对应物理地址，从而page hit! 页缺失 当CPU所需要的页面没有存放在DRAM中，发生了DRAM cache miss，如下图所示，当CPU要访问VP3时，有效位是0，此时会发生页缺失异常（page fault exception），控制权交给kernal的handler，handler选出DRAM中要被替换的PP（存在DRAM的VP）（此处选择VP4），然后PP3存放着VP3的数据，而VP4的PTE有效位为0，指向的是VM（也就是DISK） 页面分配 原本未分配的页面如VP5，给他分配磁盘空间（如使用malloc），此空间会指向disk，而不是DRAM！！ 局部性保证了虚拟内存性能！ 虚拟内存看上去会花费很多时间（每次都要查找PTE，还会引发demanding page），但是由于程序的局部性，程序总是趋向于访问一个较小的活动虚拟页面，称为工作集，当工作集比主存小时，此进程会有很好的性能。但是当所有进程工作集的大小比主存大时，可能会出现抖动（thrashing）（经常出现page falut exception） 虚拟内存作为内存管理的工具 每个进程都有自己的虚拟内存，从而每个进程都把内存空间看做时连续的线性序列。 虚拟内存能够简化内存的分配：因为任何的VP都能匹配（map）到任何的PP，而且VP在不同的时刻可以在不同的PP内。 还能够实现多进程间数据共享，如上图的PP6（可能为lib.c），不需要复制，所有进程都能得到一份PP6内容的副本。 能够简化“链接”和“加载”过程 链接过程变得容易：因为所有的虚拟内存空间都在相同的地方开始（地址空间相同） 加载过程：让当前进程的PTEs无效（invalid），然后按需将新程序的.text和.data部分一页页地复制到当前进程地page table，从而实现当前进程能执行不同地程序。 虚拟内存作为内存保护的工具 PTE的每个条目之前都有一个“权限位”，说明目标PP是可读/可写/可执行等等。其中sup表示是内核程序还是用户程序。 地址转换 常用术语 虚拟地址空间V；物理地址空间P，地址转换MAP(a) = a’（由虚拟地址a转换位物理地址a’） 基本参数： N：虚拟地址空间号 M：物理地址空间号 P：页大小 VA组成： TLB： TLBT VPN：虚拟页面号 VPO：虚拟页面偏移量 PA组成： PPN：物理页面号 PPO：物理页面偏移量 利用page table进行地址转换 首先，当前进程有一个页面表指针存放在CR3这个寄存器中，用于页面表表项的查找，根据VPN，可以在页面表中查找到PPN（如果没有page fault的话)，而PPO和VPO是相同的，因为页面大小是相同的。 而且，偏移量位数位P，因为页面大小最多位P位，当偏移量超过P，会在VPN中增加一位，表示进入了下一个页面。 地址转换过程：page hit 可以发现PTE其实存在于主存或者缓存中，MMU先从主存或者缓存得到表项，然后计算出物理地址PA，再命令主存或者缓存将目标地址的数据发送给CPU。 地址转换过程：page fault MMU得到的PTE发现有效位是0，引发了exception，挑选出victim（可能会回写），然后把需要的VP传到选好的PP，更新PTE，然后从新执行那条指令 地址转换过程：缓存的作用 可以发现：缓存只是主存的子集而已。 使用TLB加速地址转换 PTE条目存放在缓存中，存在着缓存未命中风险，就算缓存命中，也就很小的L1级缓存延迟，为了加速对PTE的访问时间，MMU内部有一个硬件级的缓存，存放着最近访问的PTE条目，称为TLB（translation lookaside buffer) 和访问主存的page table类似，也是使用VA的VPN作为索引来访问TLB，其中VPN分成了两部分，TLBI用于访问set，TLBT用于访问set中的某一列（跟普通的缓存一样的机制，也是硬件级的搜索） TLB命中 可以发现：TLB命中时，减少了对内存的访问。 TLB未命中 可以发现：TLB未命中和普通的在内存中查找PTE类似，只是会把未命中PTE在TLB中更新。 page table存储 假设页大小为4k，也就是2^12 bytes，64位系统一个可用地址为2^48，假设每个地址需要一个8 bytes的PTE存储，则一共需要2^48 / 2^12 *2^3 = 2^39 bytes，也就是512G来存储页表，这显然是不现实的，因为绝大部分的VM都没有使用，而不需要为这些没有使用的地址分配PTE。 解决办法：采用多级页表 如上所示：存储一个VM，最终只用到了一个一级页表和3个二级页表，每个页表很小（4KB）。 使用多级页表时，MMU如何找到所需的PTE呢？ 把VP中的VPN分成K等分，每一等分都可以帮助我们在第i级页表中找到下一级页表的头指针，最后一级页表，存的为所需的PTE，如下所示： 系统用几级页表，由硬件确定，intel好像用的是4级。</summary></entry><entry><title type="html">CSAPP笔记：异常控制流2</title><link href="http://localhost:4000/%E5%BC%82%E5%B8%B8%E6%8E%A7%E5%88%B6%E6%B5%81.html" rel="alternate" type="text/html" title="CSAPP笔记：异常控制流2" /><published>2020-04-12T20:32:00+08:00</published><updated>2020-04-12T20:32:00+08:00</updated><id>http://localhost:4000/%E5%BC%82%E5%B8%B8%E6%8E%A7%E5%88%B6%E6%B5%81</id><content type="html" xml:base="http://localhost:4000/%E5%BC%82%E5%B8%B8%E6%8E%A7%E5%88%B6%E6%B5%81.html">&lt;h1 id=&quot;异常控制流&quot;&gt;异常控制流&lt;/h1&gt;
+&lt;h2 id=&quot;信号&quot;&gt;信号&lt;/h2&gt;
+
+&lt;h3 id=&quot;定义&quot;&gt;定义&lt;/h3&gt;
+
+&lt;p&gt;信号是用来提醒进程：现在系统中发生了一些事情&lt;/p&gt;
+
+&lt;p&gt;信号的特点及常见ID&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Q25Q&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Q25Q.png&quot; alt=&quot;y2Q25Q.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：信号是内核与进程中的异常处理机制（软件级别）不包含其他信息。&lt;/p&gt;
+
+&lt;h4 id=&quot;发出信号&quot;&gt;发出信号&lt;/h4&gt;
+
+&lt;p&gt;由内核发送给目标进程，做的仅仅是更新了进程上下文的几个state(bits)。&lt;/p&gt;
+
+&lt;p&gt;通常内核发出信号的原因有：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;内核检测到了系统中的一些事件，比如除0，或者子进程终止&lt;/li&gt;
+  &lt;li&gt;其他进程请求内核发出信号（通过调用系统函数system call中的kill()，这种是显式的发出信号。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h4 id=&quot;接受信号&quot;&gt;接受信号&lt;/h4&gt;
+
+&lt;p&gt;目标进程当它被内核要求对发出的信号做出反应时，称为信号被接受。&lt;/p&gt;
+
+&lt;p&gt;通常接受信号时目标进程有以下反应：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QWCj&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QWCj.png&quot; alt=&quot;y2QWCj.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：用户可以自己定义signal-handler来处理信号，与硬件级别发生中断很像，只是exception handler是内核处理，此处的handler是一个用户定义的函数。&lt;/p&gt;
+
+&lt;h4 id=&quot;信号待定和信号阻塞&quot;&gt;信号待定和信号阻塞&lt;/h4&gt;
+
+&lt;p&gt;信号待定是指：一个信号已经被发送，但是还没有被接受，最多只能由一个被待定的同类型信号，不存在”排队“的概念。如果&lt;strong&gt;一个进程&lt;/strong&gt;已经存在了一个&lt;strong&gt;信号K&lt;/strong&gt;的待定，则其他发送给&lt;strong&gt;此进程的信号K&lt;/strong&gt;，都会被丢弃。&lt;/p&gt;
+
+&lt;p&gt;信号阻塞：给某进程的信号K如果被阻塞，则&lt;strong&gt;此信号K仍可以发送&lt;/strong&gt;，只是在信号K的阻塞解除前，都不能接收到此信号。&lt;/p&gt;
+
+&lt;p&gt;内核在&lt;strong&gt;每一个进程&lt;/strong&gt;都维护着待定和阻塞的位向量（bit vector)(其实就是一个32位int)。pending set：表示正在待定的信号们，blocked set：表示已经阻塞了的信号们（可以用sigprocmask来设置此进程哪些信号阻塞了）&lt;/p&gt;
+
+&lt;h3 id=&quot;发出信号-1&quot;&gt;发出信号&lt;/h3&gt;
+
+&lt;h4 id=&quot;进程群&quot;&gt;进程群&lt;/h4&gt;
+
+&lt;p&gt;每一个进程都属于唯一的进程群&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qf8s&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qf8s.png&quot; alt=&quot;y2Qf8s.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;发送信号的方式&quot;&gt;发送信号的方式&lt;/h4&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;使用/bin/kill程序对进程或进程群发出信号&lt;/p&gt;
+
+    &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qh2n&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qh2n.png&quot; alt=&quot;y2Qh2n.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;使用键盘发送信号&lt;/p&gt;
+
+    &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QIK0&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QIK0.png&quot; alt=&quot;y2QIK0.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+    &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QTbT&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QTbT.png&quot; alt=&quot;y2QTbT.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;使用kill函数来发送信号&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QHVU&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QHVU.png&quot; alt=&quot;y2QHVU.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;kill()：指定目标进程的PID，以及想要发送的信号。&lt;/p&gt;
+
+&lt;h3 id=&quot;接受信号-1&quot;&gt;接受信号&lt;/h3&gt;
+
+&lt;h4 id=&quot;接受信号时间点&quot;&gt;接受信号时间点&lt;/h4&gt;
+
+&lt;p&gt;由于接受信号需要对上下文进行一定的修改（上下文转换），所以接受信号发生在内核在exception handler return的时候，准备把控制权转交给进程p的时候，如果发现signal set已经被修改（有信号send），此时会让进程p对信号进行响应。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qq54&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qq54.png&quot; alt=&quot;y2Qq54.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;如上图：kernal如果发现进程B有信号pending，则会强制让进程B响应。&lt;/p&gt;
+
+&lt;h4 id=&quot;接受信号过程&quot;&gt;接受信号过程&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QbaF&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QbaF.png&quot; alt=&quot;y2QbaF.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：内核会根据pending和blocked的情况，计算出pnb，然后处理所有非零位（从高到低）（即处理所有信号），处理完成后，再进行p的下一条指令。&lt;/p&gt;
+
+&lt;h4 id=&quot;响应信号&quot;&gt;响应信号&lt;/h4&gt;
+
+&lt;p&gt;有四种默认的响应方式&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;终止该进程&lt;/li&gt;
+  &lt;li&gt;终止该进程并dump core(?)&lt;/li&gt;
+  &lt;li&gt;暂停程序直到收到了sigcont信号&lt;/li&gt;
+  &lt;li&gt;忽略信号&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;除了默认响应外，允许用户自定义signal handler来响应信号，具体过程如下：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;安装signal handler&lt;/li&gt;
+  &lt;li&gt;进程接受到信号（signum)后,会调用相应的信号处理函数&lt;/li&gt;
+  &lt;li&gt;处理信号（handling signal）&lt;/li&gt;
+  &lt;li&gt;return到原进程指令流。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QXG9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QXG9.png&quot; alt=&quot;y2QXG9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;信号相应函数和main函数一样，也是&lt;strong&gt;独立的逻辑流&lt;/strong&gt;，与&lt;strong&gt;main程序并发运行&lt;/strong&gt;（不同于进程间的并发，这是进程内的并发）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QXG9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QXG9.png&quot; alt=&quot;y2QXG9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qj2R&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qj2R.png&quot; alt=&quot;y2Qj2R.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：&lt;strong&gt;与普通的函数不同&lt;/strong&gt;的是，当控制权交给handler函数后，需要&lt;strong&gt;先把控制权交给内核&lt;/strong&gt;，再由内核把控制权交给main函数&lt;/p&gt;
+
+&lt;p&gt;嵌套信号处理函数：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lSr6&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lSr6.png&quot; alt=&quot;y2lSr6.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;阻塞信号&quot;&gt;阻塞信号&lt;/h3&gt;
+
+&lt;h4 id=&quot;隐式阻塞&quot;&gt;隐式阻塞&lt;/h4&gt;
+
+&lt;p&gt;当某种pending信号正在被处理时，其他所有同类型信号都会被阻塞&lt;/p&gt;
+
+&lt;h4 id=&quot;显式阻塞&quot;&gt;显式阻塞&lt;/h4&gt;
+
+&lt;p&gt;使用sigpromask函数&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QzKx&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QzKx.png&quot; alt=&quot;y2QzKx.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lpqK&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lpqK.png&quot; alt=&quot;y2lpqK.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以调用sigpromask函数，显式的阻塞某一特定信号。&lt;/p&gt;
+
+&lt;h3 id=&quot;编写安全的信号处理函数&quot;&gt;编写安全的信号处理函数&lt;/h3&gt;
+
+&lt;p&gt;信号处理函数缺点：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;不安全，由于可以访问main函数中的所有数据，如果处理不好，会破坏main函数功能&lt;/li&gt;
+  &lt;li&gt;没有提示（no cued）&lt;/li&gt;
+  &lt;li&gt;不能移植，signal handlers在不同的Linux系统不能兼容&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;信号处理函数编写准则&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;尽量简洁：比如就设置下全局标签global flag然后返回&lt;/li&gt;
+  &lt;li&gt;使用异步信号安全函数（async-signal-safe functions）？？？&lt;/li&gt;
+  &lt;li&gt;保存errorno信息&lt;/li&gt;
+  &lt;li&gt;不开放一些数据结构的权限（是这个意思吗。。没懂）&lt;/li&gt;
+  &lt;li&gt;定义全局变量为volatile（此时全局变量不会存在寄存器中）&lt;/li&gt;
+  &lt;li&gt;定义全局标签为volatile（flag:只能读写，不能修改比如flag++）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lCVO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lCVO.png&quot; alt=&quot;y2lCVO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;使用异步信号安全函数&quot;&gt;使用异步信号安全函数&lt;/h4&gt;
+
+&lt;p&gt;异步信号安全函数：是可重入的或者是不能被信号打断的。&lt;/p&gt;
+
+&lt;p&gt;可重入是指：函数所有变量都存在于stack frame上，没有使用全局变量或全局函数，从而没有锁，不会互斥，可被多个进程同时调用。&lt;/p&gt;
+
+&lt;p&gt;种类：117个&lt;/p&gt;
+
+&lt;p&gt;典型错误：死锁，如调用printf，由于不是信号异步函数，handler调用printf可能会出现死锁（此时printf被main锁住了）&lt;/p&gt;
+
+&lt;h4 id=&quot;不能使用handler计数信号&quot;&gt;不能使用handler计数信号&lt;/h4&gt;
+
+&lt;p&gt;因为只能由一个Pending的同种类信号，其余信号都会被丢弃。&lt;/p&gt;
+
+&lt;p&gt;错误计数：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lPaD&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lPaD.png&quot; alt=&quot;y2lPaD.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;正确计数：(把if改成while)&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lPaD&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lPaD.png&quot; alt=&quot;y2lPaD.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;利用同步流防止竞争&quot;&gt;利用同步流防止竞争&lt;/h4&gt;
+
+&lt;p&gt;对于一些公共数据的处理，需要防止handler和main程序的资源竞争，具体做法是在处理公共资源的前后，加上sigpromask来阻止信号中断。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lERA&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lERA.png&quot; alt=&quot;y2lERA.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lkPH&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lkPH.png&quot; alt=&quot;y2lkPH.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;上图的代码出现了&lt;strong&gt;并发进程的典型错误&lt;/strong&gt;（虽然这两个是同一进程，但也算并发了），那就是无法确定是handler是先运行还是main先运行，如果handler先运行，则会删除joblist中不存在的PID。&lt;/p&gt;
+
+&lt;p&gt;解决办法：在fork子进程之前，屏蔽了SIGCHID，这样main函数运行时，就算子进程已经回收发出了SIGCHID信号，也会被pending，待将joblist更新后，在来reap child，这样就能保障顺序（同步）。&lt;/p&gt;
+
+&lt;p&gt;我们不能决定child和parent谁先运行，但是我们可以在main中parent中暂时屏蔽信号。&lt;/p&gt;
+
+&lt;h4 id=&quot;显式等待某种信号&quot;&gt;显式等待某种信号&lt;/h4&gt;
+
+&lt;p&gt;具体做法：设置一个flag称为pid，当调用了某个信号处理函数，更改pid，从而可以确定某个信号已经处理完毕。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2leMt&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2leMt.png&quot; alt=&quot;y2leMt.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lnqf&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lnqf.png&quot; alt=&quot;y2lnqf.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：1，首先利用sigpromask保证main先把pid设置成0&lt;/p&gt;
+
+&lt;p&gt;2,使用while(!pid)来判断是否接受到了特定信号&lt;/p&gt;
+
+&lt;p&gt;3，程序很浪费：一直在打印，占用资源&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lKZ8&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lKZ8.png&quot; alt=&quot;y2lKZ8.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;想到了其他办法：&lt;/p&gt;
+
+&lt;p&gt;1，使用pause（）：可以暂停，一直到信号接受，但是有bug，因为信号可以在while和pause中间产生中断，从而忽略了此次pid。&lt;/p&gt;
+
+&lt;p&gt;2，使用sleep()，但时间不好控制，时间太短，会一直占用CPU，时间太长，会使Main程序变慢。&lt;/p&gt;
+
+&lt;p&gt;解决办法：使用sigsuspend（原子性，不能被中断）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lMdS&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lMdS.png&quot; alt=&quot;y2lMdS.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：sigsuspend函数，可以先解除对sigchild的屏蔽，然后在屏蔽&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2lQIg&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2lQIg.png&quot; alt=&quot;y2lQIg.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;使用sigsuspend函数显式的等待某项信号。&lt;/p&gt;
+
+&lt;h2 id=&quot;非本地跳转&quot;&gt;非本地跳转&lt;/h2&gt;
+
+&lt;p&gt;C语言可以允许一个函数（callee）不返回caller，而返回其他并没有调用这个callee的函数，称为非本地跳转（longjump…）&lt;/p&gt;
+
+&lt;p&gt;具体见教材。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">异常控制流 信号</summary></entry><entry><title type="html">CSAPP笔记：异常控制流1</title><link href="http://localhost:4000/%E5%BC%82%E5%B8%B8%E6%8E%A7%E5%88%B6%E6%B5%81.html" rel="alternate" type="text/html" title="CSAPP笔记：异常控制流1" /><published>2020-04-12T20:32:00+08:00</published><updated>2020-04-12T20:32:00+08:00</updated><id>http://localhost:4000/%E5%BC%82%E5%B8%B8%E6%8E%A7%E5%88%B6%E6%B5%81</id><content type="html" xml:base="http://localhost:4000/%E5%BC%82%E5%B8%B8%E6%8E%A7%E5%88%B6%E6%B5%81.html">&lt;h1 id=&quot;异常控制流&quot;&gt;异常控制流&lt;/h1&gt;
+
+&lt;h2 id=&quot;异常控制流定义&quot;&gt;异常控制流定义&lt;/h2&gt;
+
+&lt;h3 id=&quot;什么是控制流&quot;&gt;什么是控制流&lt;/h3&gt;
+
+&lt;p&gt;从计算机启动到关闭，CPU做的仅仅是处理一系列&lt;strong&gt;顺序&lt;/strong&gt;的指令，一次一条。这个顺序指令叫做CPU的控制流。&lt;/p&gt;
+
+&lt;h3 id=&quot;如何改变控制流&quot;&gt;如何改变控制流&lt;/h3&gt;
+
+&lt;p&gt;迄今为止已经学习了软件方面的控制流改变：1，branches/jumps 2，call/return。这两种改变都是针对“程序状态”&lt;/p&gt;
+
+&lt;p&gt;对于“系统级状态”的改变，控制流应该如何处理呢？比如磁盘数据上载到内存，或者程序除以0，或者键盘按下ctrl+c，或者&lt;strong&gt;系统计时器&lt;/strong&gt;终止等等，控制流需要靠“异常控制流”的机制应对。&lt;/p&gt;
+
+&lt;h3 id=&quot;异常控制流-1&quot;&gt;异常控制流&lt;/h3&gt;
+
+&lt;p&gt;存在于计算机的各个层级，分别如下&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;异常：当发生了系统事件（system event）时，比如系统状态改变等，需要产生一个“异常”来处理，需要硬件和操作系统软件的配合&lt;/li&gt;
+  &lt;li&gt;进程上下文转换：需要硬件计时器和操作系统软件配合&lt;/li&gt;
+  &lt;li&gt;信号:由操作系统软件控制&lt;/li&gt;
+  &lt;li&gt;非本地跳转：由C的runtime library控制&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;异常&quot;&gt;异常&lt;/h2&gt;
+
+&lt;h3 id=&quot;定义&quot;&gt;定义&lt;/h3&gt;
+
+&lt;p&gt;异常是指为了响应某一&lt;strong&gt;事件event&lt;/strong&gt;，控制权由当前执行的程序转移到操作系统内核（OS kernel）&lt;/p&gt;
+
+&lt;p&gt;内核：操作系统内存常驻部分&lt;/p&gt;
+
+&lt;p&gt;常见&lt;strong&gt;事件event&lt;/strong&gt;：除以0，计算溢出，页缺失（page faults），I/O请求完成，键入ctrl+c等等&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;事件&lt;/strong&gt;处理过程如下&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2MxHS&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2MxHS.png&quot; alt=&quot;y2MxHS.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：在kernel的异常处理器处理完成了，有三种情况。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Q9hj&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Q9hj.png&quot; alt=&quot;y2Q9hj.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：内核中有一张异常表，每一种事件都对应着一个编号，供查到对应的处理程序。&lt;/p&gt;
+
+&lt;h3 id=&quot;异常分类&quot;&gt;异常分类&lt;/h3&gt;
+
+&lt;h4 id=&quot;异步异常&quot;&gt;异步异常&lt;/h4&gt;
+
+&lt;p&gt;发生在处理器外部的事件引起的异常，通过处理器的中断引脚（interrupt pin）传给处理器，并且异常处理器（exception handler）完成后，会接着处理原控制流的下一条指令（next）&lt;/p&gt;
+
+&lt;p&gt;举例：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2MvB8&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2MvB8.png&quot; alt=&quot;y2MvB8.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：timer interrupt可以帮助内核掌握控制权。&lt;/p&gt;
+
+&lt;h4 id=&quot;同步异常&quot;&gt;同步异常&lt;/h4&gt;
+
+&lt;p&gt;由于执行某一条指令发生的异常&lt;/p&gt;
+
+&lt;p&gt;分类：&lt;/p&gt;
+
+&lt;p&gt;陷阱traps,错误faults，中止aborts。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QpNQ&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QpNQ.png&quot; alt=&quot;y2QpNQ.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：traps可以恢复，且是当前程序主动请求的，比如请求system call系统调用，来调用系统函数，faults不是主动请求的而是不可能预测的，发生faults时，程序后能会在原处（不是next）接着重新运行，也可能中断&lt;/p&gt;
+
+&lt;p&gt;常见system call符号：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QP9s&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QP9s.png&quot; alt=&quot;y2QP9s.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qi3n&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qi3n.png&quot; alt=&quot;y2Qi3n.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;上图为系统调用举例&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QFcq&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QFcq.png&quot; alt=&quot;y2QFcq.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;上图为页缺失举例：当前内存没有所需要的地址a[500]，从磁盘中调用&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qkj0&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qkj0.png&quot; alt=&quot;y2Qkj0.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;上图为页缺失的另一种情况：当为错误地址时，发出signal&lt;/p&gt;
+
+&lt;h2 id=&quot;进程&quot;&gt;进程&lt;/h2&gt;
+
+&lt;h3 id=&quot;进程定义&quot;&gt;进程定义&lt;/h3&gt;
+
+&lt;p&gt;定义：进程是指运行程序的一个实例（因为运行的程序可能有多种存在形式，比如.c,.o,.text或者加载到了内存中）&lt;/p&gt;
+
+&lt;p&gt;两大关键抽象&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;逻辑控制流：每个进程看上去都在单独的在使用CPU，通过OS的”上下文切换“机制产生&lt;/li&gt;
+  &lt;li&gt;私有地址空间：每个进程看上去都在单独的使用内存，通过”虚拟内存“的机制产生。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;多进程的假象：看上去同时运行着多个进程，每个进程都在使用CPU和内存。&lt;/p&gt;
+
+&lt;p&gt;传统单核处理器处理多进程：交错处理，进行多进程转换时，先把当前&lt;strong&gt;寄存器中的值和地址空间存&lt;/strong&gt;在内存中，然后转到另一个进程执行，当执行另一个进程时，把那个进程之前存好的寄存器值和地址空间读取出来即可&lt;/p&gt;
+
+&lt;p&gt;现代多核处理器处理多进程：依然是共享内存和一些缓存，但是每一个核都可以处理一个进程了，进程数超过核心数，也要进行&lt;strong&gt;上下文切换&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;多进程的并发性：如果在进程A的逻辑控制流核进程B的逻辑控制流时间交叠，则称这两个进程是并发的（实际在物理层面，它们并没有交叠）比如下图&lt;/p&gt;
+
+&lt;p&gt;A/B,A/C&lt;strong&gt;并发&lt;/strong&gt;，B/C&lt;strong&gt;顺序&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QmEF&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QmEF.png&quot; alt=&quot;y2QmEF.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QVBT&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QVBT.png&quot; alt=&quot;y2QVBT.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;上下文切换：由操作系统内核控制着进程及上下文切换（注意内核不是单独运行的进程，而是作为某些进程的一部分在运行着）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QEuV&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QEuV.png&quot; alt=&quot;y2QEuV.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;进程控制操作进程&quot;&gt;进程控制（操作进程）&lt;/h3&gt;
+
+&lt;hr /&gt;
+
+&lt;h4 id=&quot;系统函数调用错误&quot;&gt;系统函数调用错误&lt;/h4&gt;
+
+&lt;p&gt;调用系统函数（system call）规则：一定要检查系统函数的返回状态！除了那些返回值为void的系统函数&lt;/p&gt;
+
+&lt;p&gt;处理系统函数调用错误：通常系统会会设置errno来表示错误原因，并返回-1。如下图调用fork()&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QnN4&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QnN4.png&quot; alt=&quot;y2QnN4.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以使用错误报告函数unix_error来简化错误报告。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Q1jx&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Q1jx.png&quot; alt=&quot;y2Q1jx.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;也可以使用错误处理包装来包装系统调用函数&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qlg1&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qlg1.png&quot; alt=&quot;y2Qlg1.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;获得进程id&quot;&gt;获得进程ID&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QMC9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QMC9.png&quot; alt=&quot;y2QMC9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;产生终止进程&quot;&gt;产生/终止进程&lt;/h4&gt;
+
+&lt;p&gt;从程序员角度，我们可以把进程状态分为三种：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;运行：正在运行或者准备运行（已经内核被安排上）&lt;/li&gt;
+  &lt;li&gt;停止：进程被某个信号停止了（suspended）并且不会被安排运行，直到收到&lt;strong&gt;信号&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;终止：永久停止了&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;进程终止原因：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;收到某个信号&lt;/li&gt;
+  &lt;li&gt;在main函数中return了&lt;/li&gt;
+  &lt;li&gt;调用exit()函数&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;exit()函数：特殊的函数，一旦调用，永远不会返回。（但是可以从main函数中return 一个状态值）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QQ3R&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QQ3R.png&quot; alt=&quot;y2QQ3R.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;产生进程：使用fork()函数产生新的子进程（child process）&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;fork()函数详解&lt;/strong&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;子进程获得父进程的一模一样的虚拟内存地址的副本，但是PID和父进程不同&lt;/li&gt;
+  &lt;li&gt;调用一次fork()，会return两次（子进程，父进程各return一次）&lt;/li&gt;
+  &lt;li&gt;fork()在子进程中return 0，在父进程中return子进程的PID&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;不能预测子进程和父进程哪个先执行&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Q8u6&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Q8u6.png&quot; alt=&quot;y2Q8u6.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;使用进程图分析fork&quot;&gt;使用进程图分析fork()&lt;/h4&gt;
+
+&lt;p&gt;使用进程图，可以方便我们分析当前并发程序（假并发）中，语句的执行顺序&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QGDK&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QGDK.png&quot; alt=&quot;y2QGDK.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现语句执行顺序为拓扑结构，由于可以进行上下文切换，有多种可行的执行顺序。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QJHO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QJHO.png&quot; alt=&quot;y2QJHO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;子进程回收&quot;&gt;子进程回收&lt;/h4&gt;
+
+&lt;p&gt;当子进程运行完后，依然占用着系统的资源（包括exit status退出状态，OS表等），称为僵尸（半死半活）&lt;/p&gt;
+
+&lt;p&gt;父进程需要对僵尸进行回收：使用wait/waitpid函数，父进程能够得到子进程的退出状态（exit status），然后内核清理僵尸子进程。&lt;/p&gt;
+
+&lt;p&gt;如果父进程没有回收，父进程终止后，那些僵尸进程会被init 进程（pid == 1）回收，但是我们需要显式的回收长期运行的进程（比如shell/servers）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QtED&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QtED.png&quot; alt=&quot;y2QtED.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QU4H&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QU4H.png&quot; alt=&quot;y2QU4H.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;上图为子进程长期运行的例子（可知我们必须&lt;strong&gt;显式的终止&lt;/strong&gt;长期运行的进程）&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;我们可以使用wait来回收子进程（与子进程同步）：&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Q0gI&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Q0gI.png&quot; alt=&quot;y2Q0gI.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;当child_status非空时，会指向一个子进程的退出状态，根据此状态，可以确定有&lt;strong&gt;某个&lt;/strong&gt;子进程终止，还能确定退出状态（终止状态？）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qw8A&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qw8A.png&quot; alt=&quot;y2Qw8A.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;加载并运行新程序&quot;&gt;加载并运行新程序&lt;/h4&gt;
+
+&lt;p&gt;execve()允许当前进程的上下文中加载并允许新的程序&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QdCd&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QdCd.png&quot; alt=&quot;y2QdCd.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：filename:为可执行文件：如.o文件或者脚本文件（通过解释器如shell,bash等允许命令行，通常是以#! intepreter 比如#! bin/bash开头）&lt;/p&gt;
+
+&lt;p&gt;argument[]以null结尾，指向一系列参数字符串，通常第一个为需要指向的文件名，之后为命令行指令参数。&lt;/p&gt;
+
+&lt;p&gt;envp[]以null结尾，指向一系列环境变量，形式：”name = value”&lt;/p&gt;
+
+&lt;p&gt;重点：会覆盖原有进程的code/data/stack！！！但是保留了PID，打开的文件，信号上下文？？&lt;/p&gt;
+
+&lt;p&gt;特点：此函数如果不报错（也就是只要filename指向的程序能够运行）就不会在执行进程中的原程序了，也就是&lt;strong&gt;call once and never returns&lt;/strong&gt;。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QBvt&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QBvt.png&quot; alt=&quot;y2QBvt.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;在Main的stack frame的头顶，会存放着我们调用execve()是的参数，比如argu[]和envp[]等（与传统直接调用Main不同的点?)&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;异常控制流.assets/image-20200303135615673.png&quot; alt=&quot;image-20200303135615673&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现执行”bin/ls -lt /usr/include“这条命令，会分成三段放在argv[]里面，（注意调用系统函数还是要检查返回值。。)&lt;/p&gt;
+
+&lt;h3 id=&quot;shell&quot;&gt;Shell&lt;/h3&gt;
+
+&lt;h4 id=&quot;linux系统的进程结构&quot;&gt;linux系统的进程结构：&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QcVS&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QcVS.png&quot; alt=&quot;y2QcVS.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：init进程的PID为1，所有其他进程是init的子进程&lt;/p&gt;
+
+&lt;p&gt;Daemon：系统中长期运行的其他进程（辅助进程）&lt;/p&gt;
+
+&lt;p&gt;login shell：用户登录后会有一个与身份对应的shell进程（shell本身是一个程序）&lt;/p&gt;
+
+&lt;h4 id=&quot;常见shell&quot;&gt;常见shell：&lt;/h4&gt;
+
+&lt;p&gt;shell本身是一个应用程序，可以代表user来跑其他程序，常见的shell有sh/csh/bash，其中bash为linux默认shell&lt;/p&gt;
+
+&lt;h4 id=&quot;shell程序举例&quot;&gt;shell程序举例&lt;/h4&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2Qyb8&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2Qyb8.png&quot; alt=&quot;y2Qyb8.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：从stdin把用户输入的命令行写入cmdline，首先判断是否输入的是否为ctrl+d，如果是，则退出shell，否则，执行输入的命令行（解释）（eval）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y2QgUg&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/17/y2QgUg.png&quot; alt=&quot;y2QgUg.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中：buf：保存着修改后的comdline，&lt;/p&gt;
+
+&lt;p&gt;argv[]保存着可执行文件的文件名以及参数&lt;/p&gt;
+
+&lt;p&gt;如果argv是内置的指令，则执行，不是内置指令，则fork一个子进程，然后在子进程中调用execve来执行目标文件。&lt;/p&gt;
+
+&lt;p&gt;bg：判断是否为后台进程，如果不是后台（是前台）进程，则得一直等待进程的结束，才能执行之后的命令。&lt;/p&gt;
+
+&lt;p&gt;可以发现：对于前台进程，shell可以回收，但是对于后台进程，当它们终止后会变成僵尸进程，并且一直不会回收（因为shell是一直运行的）从而占用内存资源。所以我们需要一种机制，来提醒shell回收进程———&lt;strong&gt;signal&lt;/strong&gt;！&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">异常控制流 异常控制流定义 什么是控制流 从计算机启动到关闭，CPU做的仅仅是处理一系列顺序的指令，一次一条。这个顺序指令叫做CPU的控制流。 如何改变控制流 迄今为止已经学习了软件方面的控制流改变：1，branches/jumps 2，call/return。这两种改变都是针对“程序状态” 对于“系统级状态”的改变，控制流应该如何处理呢？比如磁盘数据上载到内存，或者程序除以0，或者键盘按下ctrl+c，或者系统计时器终止等等，控制流需要靠“异常控制流”的机制应对。 异常控制流 存在于计算机的各个层级，分别如下 异常：当发生了系统事件（system event）时，比如系统状态改变等，需要产生一个“异常”来处理，需要硬件和操作系统软件的配合 进程上下文转换：需要硬件计时器和操作系统软件配合 信号:由操作系统软件控制 非本地跳转：由C的runtime library控制 异常 定义 异常是指为了响应某一事件event，控制权由当前执行的程序转移到操作系统内核（OS kernel） 内核：操作系统内存常驻部分 常见事件event：除以0，计算溢出，页缺失（page faults），I/O请求完成，键入ctrl+c等等 事件处理过程如下 可以发现：在kernel的异常处理器处理完成了，有三种情况。 可以发现：内核中有一张异常表，每一种事件都对应着一个编号，供查到对应的处理程序。 异常分类 异步异常 发生在处理器外部的事件引起的异常，通过处理器的中断引脚（interrupt pin）传给处理器，并且异常处理器（exception handler）完成后，会接着处理原控制流的下一条指令（next） 举例： 可以发现：timer interrupt可以帮助内核掌握控制权。 同步异常 由于执行某一条指令发生的异常 分类： 陷阱traps,错误faults，中止aborts。 可以发现：traps可以恢复，且是当前程序主动请求的，比如请求system call系统调用，来调用系统函数，faults不是主动请求的而是不可能预测的，发生faults时，程序后能会在原处（不是next）接着重新运行，也可能中断 常见system call符号： 上图为系统调用举例 上图为页缺失举例：当前内存没有所需要的地址a[500]，从磁盘中调用 上图为页缺失的另一种情况：当为错误地址时，发出signal 进程 进程定义 定义：进程是指运行程序的一个实例（因为运行的程序可能有多种存在形式，比如.c,.o,.text或者加载到了内存中） 两大关键抽象 逻辑控制流：每个进程看上去都在单独的在使用CPU，通过OS的”上下文切换“机制产生 私有地址空间：每个进程看上去都在单独的使用内存，通过”虚拟内存“的机制产生。 多进程的假象：看上去同时运行着多个进程，每个进程都在使用CPU和内存。 传统单核处理器处理多进程：交错处理，进行多进程转换时，先把当前寄存器中的值和地址空间存在内存中，然后转到另一个进程执行，当执行另一个进程时，把那个进程之前存好的寄存器值和地址空间读取出来即可 现代多核处理器处理多进程：依然是共享内存和一些缓存，但是每一个核都可以处理一个进程了，进程数超过核心数，也要进行上下文切换 多进程的并发性：如果在进程A的逻辑控制流核进程B的逻辑控制流时间交叠，则称这两个进程是并发的（实际在物理层面，它们并没有交叠）比如下图 A/B,A/C并发，B/C顺序 上下文切换：由操作系统内核控制着进程及上下文切换（注意内核不是单独运行的进程，而是作为某些进程的一部分在运行着） 进程控制（操作进程） 系统函数调用错误 调用系统函数（system call）规则：一定要检查系统函数的返回状态！除了那些返回值为void的系统函数 处理系统函数调用错误：通常系统会会设置errno来表示错误原因，并返回-1。如下图调用fork() 可以使用错误报告函数unix_error来简化错误报告。 也可以使用错误处理包装来包装系统调用函数 获得进程ID 产生/终止进程 从程序员角度，我们可以把进程状态分为三种： 运行：正在运行或者准备运行（已经内核被安排上） 停止：进程被某个信号停止了（suspended）并且不会被安排运行，直到收到信号 终止：永久停止了 进程终止原因： 收到某个信号 在main函数中return了 调用exit()函数 exit()函数：特殊的函数，一旦调用，永远不会返回。（但是可以从main函数中return 一个状态值） 产生进程：使用fork()函数产生新的子进程（child process） fork()函数详解 子进程获得父进程的一模一样的虚拟内存地址的副本，但是PID和父进程不同 调用一次fork()，会return两次（子进程，父进程各return一次） fork()在子进程中return 0，在父进程中return子进程的PID 不能预测子进程和父进程哪个先执行 使用进程图分析fork() 使用进程图，可以方便我们分析当前并发程序（假并发）中，语句的执行顺序 可以发现语句执行顺序为拓扑结构，由于可以进行上下文切换，有多种可行的执行顺序。 子进程回收 当子进程运行完后，依然占用着系统的资源（包括exit status退出状态，OS表等），称为僵尸（半死半活） 父进程需要对僵尸进行回收：使用wait/waitpid函数，父进程能够得到子进程的退出状态（exit status），然后内核清理僵尸子进程。 如果父进程没有回收，父进程终止后，那些僵尸进程会被init 进程（pid == 1）回收，但是我们需要显式的回收长期运行的进程（比如shell/servers） 上图为子进程长期运行的例子（可知我们必须显式的终止长期运行的进程） 我们可以使用wait来回收子进程（与子进程同步）： 当child_status非空时，会指向一个子进程的退出状态，根据此状态，可以确定有某个子进程终止，还能确定退出状态（终止状态？） 加载并运行新程序 execve()允许当前进程的上下文中加载并允许新的程序 其中：filename:为可执行文件：如.o文件或者脚本文件（通过解释器如shell,bash等允许命令行，通常是以#! intepreter 比如#! bin/bash开头） argument[]以null结尾，指向一系列参数字符串，通常第一个为需要指向的文件名，之后为命令行指令参数。 envp[]以null结尾，指向一系列环境变量，形式：”name = value” 重点：会覆盖原有进程的code/data/stack！！！但是保留了PID，打开的文件，信号上下文？？ 特点：此函数如果不报错（也就是只要filename指向的程序能够运行）就不会在执行进程中的原程序了，也就是call once and never returns。 在Main的stack frame的头顶，会存放着我们调用execve()是的参数，比如argu[]和envp[]等（与传统直接调用Main不同的点?) 可以发现执行”bin/ls -lt /usr/include“这条命令，会分成三段放在argv[]里面，（注意调用系统函数还是要检查返回值。。) Shell linux系统的进程结构： 其中：init进程的PID为1，所有其他进程是init的子进程 Daemon：系统中长期运行的其他进程（辅助进程） login shell：用户登录后会有一个与身份对应的shell进程（shell本身是一个程序） 常见shell： shell本身是一个应用程序，可以代表user来跑其他程序，常见的shell有sh/csh/bash，其中bash为linux默认shell shell程序举例 其中：从stdin把用户输入的命令行写入cmdline，首先判断是否输入的是否为ctrl+d，如果是，则退出shell，否则，执行输入的命令行（解释）（eval） 其中：buf：保存着修改后的comdline， argv[]保存着可执行文件的文件名以及参数 如果argv是内置的指令，则执行，不是内置指令，则fork一个子进程，然后在子进程中调用execve来执行目标文件。 bg：判断是否为后台进程，如果不是后台（是前台）进程，则得一直等待进程的结束，才能执行之后的命令。 可以发现：对于前台进程，shell可以回收，但是对于后台进程，当它们终止后会变成僵尸进程，并且一直不会回收（因为shell是一直运行的）从而占用内存资源。所以我们需要一种机制，来提醒shell回收进程———signal！</summary></entry><entry><title type="html">CSAPP笔记：链接</title><link href="http://localhost:4000/%E9%93%BE%E6%8E%A5.html" rel="alternate" type="text/html" title="CSAPP笔记：链接" /><published>2020-04-02T21:43:00+08:00</published><updated>2020-04-02T21:43:00+08:00</updated><id>http://localhost:4000/%E9%93%BE%E6%8E%A5</id><content type="html" xml:base="http://localhost:4000/%E9%93%BE%E6%8E%A5.html">&lt;h1 id=&quot;链接&quot;&gt;链接&lt;/h1&gt;
+
+&lt;h2 id=&quot;链接详解&quot;&gt;链接详解&lt;/h2&gt;
+
+&lt;h3 id=&quot;静态链接例子&quot;&gt;静态链接例子&lt;/h3&gt;
+
+&lt;p&gt;对于两个.c文件，如何形成可执行的目标文件呢？&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QKo9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QKo9.png&quot; alt=&quot;y6QKo9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QQiR&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QQiR.png&quot; alt=&quot;y6QQiR.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;两个源代码分别经过预处理编译器，编译编译器，汇编编译器，生成了两个可重定向的目标文件，再经过链接器，链接成可执行目标文件。(在编译过程中需要&lt;strong&gt;指定&lt;/strong&gt;两个.c文件)&lt;/p&gt;
+
+&lt;h3 id=&quot;链接器优势&quot;&gt;链接器优势&lt;/h3&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;模块化：程序是由许多小的源文件组成，而不是大的单一文件。并且能构建包含许多函数的库。&lt;/li&gt;
+  &lt;li&gt;提高效率：节省时间：当修改源文件时，只需要重新编译那个修改的源文件，而不需要重新编译其他源文件。节省空间：公用的函数压缩成库，函数调用库时，只需要加载库中的某一些函数。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;链接器的工作步骤&quot;&gt;链接器的工作步骤&lt;/h3&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;符号解析（简单解析）
+    &lt;ol&gt;
+      &lt;li&gt;程序能够定义和引用符号（全局变量或者函数）&lt;/li&gt;
+      &lt;li&gt;这些符号（全局变量/函数）的定义在目标文件（.o)中以符号表的形式保存着，每一个符号对应着名称，大小，符号位置（以structs形式）&lt;/li&gt;
+      &lt;li&gt;在符号解析阶段，链接器将每一个符号引用和其定义（名称，大小，符号位置）一一对应。&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+  &lt;li&gt;重定位阶段
+    &lt;ol&gt;
+      &lt;li&gt;目的是将分开储存的数据和代码组合成&lt;strong&gt;单一区域&lt;/strong&gt;&lt;/li&gt;
+      &lt;li&gt;重定位：由符号的相对位置，找到其绝对位置&lt;/li&gt;
+      &lt;li&gt;更新符号引用中的位置为它们的绝对位置？？&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;一些定义&quot;&gt;一些定义&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;三种目标文件（object files）（模块）&lt;/p&gt;
+
+    &lt;ul&gt;
+      &lt;li&gt;重定向目标文件（.o file）（汇编器生成的二进制文件）：不能直接加载当内存，需要等待链接器的链接，其中数据和代码以某种形式存储（ELF），每一个.o文件对应着一个源文件。&lt;/li&gt;
+      &lt;li&gt;可运行目标文件（a.out file）能够直接加载到内存并运行&lt;/li&gt;
+      &lt;li&gt;共享目标文件（.so file）（共享库）：特殊的重定向目标文件，能够在&lt;strong&gt;加载时间？？&lt;/strong&gt;和运行时期动态的载入内存和动态链接，在windows中称为dll文件。&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;可执行可链接格式（ELF）&lt;/p&gt;
+
+    &lt;p&gt;针对二进制目标文件（上面三种）的标准格式，所以上面三种文件又称为ELF二进制。&lt;/p&gt;
+
+    &lt;p&gt;这种二进制文件的格式如下图所示：每一部分都有详细划分。&lt;/p&gt;
+
+    &lt;p&gt;.bss文件储存未初始化的全局变量。&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QGQK&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QGQK.png&quot; alt=&quot;y6QGQK.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Q3z6&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Q3z6.png&quot; alt=&quot;y6Q3z6.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;链接器符号链接步骤&quot;&gt;链接器符号/链接步骤&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;链接器符号
+    &lt;ul&gt;
+      &lt;li&gt;全局符号（global symbols)：在模块m中定义，并能被其他模块引用的符号，比如non-static 函数或者non-static 全局变量&lt;/li&gt;
+      &lt;li&gt;外部符号（external symbols）：在模块m中被引用，在其他模块被定义的全局符号&lt;/li&gt;
+      &lt;li&gt;局部符号（local symbols）：在模块m中定义，只能在模块m中引用的符号，比如static的函数和全局变量。&lt;/li&gt;
+      &lt;li&gt;区分局部非静态变量和局部静态变量：local non-static存在stack上，local static存在.bss或者.data&lt;/li&gt;
+      &lt;li&gt;强符号/或符号：强符号：过程/已经初始化的全局变量，弱符号：未初始化的全局变量，不允许多个同名强变量，但允许多个同名弱变量，会随机选择一个初始化。&lt;strong&gt;一定要避免弱变量，很容易出Bug&lt;/strong&gt;&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;全局符号使用原则：尽可能static，尽可能初始化，尽可能声明external&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;blockquote&gt;
+
+  &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QlJ1&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QlJ1.png&quot; alt=&quot;y6QlJ1.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+  &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Q1Rx&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Q1Rx.png&quot; alt=&quot;y6Q1Rx.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;/blockquote&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;链接步骤&lt;/p&gt;
+
+    &lt;ul&gt;
+      &lt;li&gt;
+        &lt;p&gt;符号解析：确定目标文件中的符号表&lt;/p&gt;
+
+        &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QYLD&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QYLD.png&quot; alt=&quot;y6QYLD.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+      &lt;/li&gt;
+      &lt;li&gt;
+        &lt;p&gt;重定向&lt;/p&gt;
+
+        &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QNee&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QNee.png&quot; alt=&quot;y6QNee.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+      &lt;/li&gt;
+    &lt;/ul&gt;
+
+    &lt;p&gt;可以发现：重定向需要重新规划各个重定向目标文件的.text./data section的地址，从而组成可执行目标文件的.text和.data&lt;/p&gt;
+
+    &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QJsO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QJsO.png&quot; alt=&quot;y6QJsO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+    &lt;p&gt;可以发现：对于那些需要定位地址的部分，如array的地址和sum函数的地址，都用00000000代替，然后使用了relocation entry，这些entries可以帮助linker有足够的信息，组成可执行的目标文件（详细解释见教材，视频也没怎么讲）&lt;/p&gt;
+
+    &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Qaod&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Qaod.png&quot; alt=&quot;y6Qaod.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+    &lt;p&gt;可以发现：之前array和sum的地址确定了！（之前好像用的相对地址）然后main函数好像就是紧接在system code的后面。&lt;/p&gt;
+
+    &lt;p&gt;这张图的困惑：1，为什么要多开8个字节的stack呢，明明callee个caller使用寄存器来共享数据呀&lt;/p&gt;
+
+    &lt;p&gt;2，程序计数器（rpi）的相对地址是什么东西。&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;最后，可执行文件被加载到内存，如下图所示&lt;/p&gt;
+
+    &lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Q0JI&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Q0JI.png&quot; alt=&quot;y6Q0JI.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;上图针对linux系统，程序开始地址0x400000，有一段内存映射区域供共享库使用。&lt;/p&gt;
+
+&lt;h2 id=&quot;链接库&quot;&gt;链接库&lt;/h2&gt;
+
+&lt;p&gt;如何方便的使用那些常用的函数呢：方法1：把常用函数用单一的源文件存储，这样在linker会把一个很大的.o文件链接进去，时间空间成本高。方法2：把常用函数分别用源文件存储，程序员在编译时手动显式的链接要使用的.o文件，这样效率高，但增加程序员负担。&lt;/p&gt;
+
+&lt;p&gt;解决办法：把常用的函数打包形成链接库，在main.c文件中包含这些链接库，liner可以在链接库中找到所需的函数的.o文件，链接需要的.o文件&lt;/p&gt;
+
+&lt;p&gt;链接库按照链接的时间不同：分为&lt;strong&gt;静态链接库&lt;/strong&gt;和&lt;strong&gt;动态链接库&lt;/strong&gt;。&lt;/p&gt;
+
+&lt;h3 id=&quot;静态链接库&quot;&gt;静态链接库&lt;/h3&gt;
+
+&lt;p&gt;所有相关的.o文件重新排位后压缩到一个.a（archive file/档案文件）（AR：归档器）中，当liner发现了无法解析的符号时，会在一个或多个.o文件中查找，找到所需要的文件&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QBWt&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QBWt.png&quot; alt=&quot;y6QBWt.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：归档器（archiver)允许更新文件以及重新编译替换文件&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QwFA&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QwFA.png&quot; alt=&quot;y6QwFA.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：对象文件按字符串排列索引&lt;/p&gt;
+
+&lt;p&gt;链接过程：在所需要的归档文件中选择所需函数链接即可(.h文件存储了所需要的函数声明，然后链接器按照声明在归档文件中找到所需函数)（.h文件在cpp过程中被放在主代码部分形成.i文件，其实里面内容就是些全局对象的声明）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QrSP&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QrSP.png&quot; alt=&quot;y6QrSP.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;链接如下图所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QsQf&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QsQf.png&quot; alt=&quot;y6QsQf.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;编译指令如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Qyy8&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Qyy8.png&quot; alt=&quot;y6Qyy8.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现：按照linker执行“解析符号”的顺序，不能把.a(即图中的-lmine)文件放在前面，不然无法解析.o文件中的符号。&lt;/p&gt;
+
+&lt;p&gt;静态链接库缺点：1，需要不断地复制libc中的函数，如果你的system libraries中有Bug，所有使用了该库的文件都需要重新&lt;strong&gt;显式relink&lt;/strong&gt;。&lt;/p&gt;
+
+&lt;h3 id=&quot;动态链接库&quot;&gt;动态链接库&lt;/h3&gt;
+
+&lt;p&gt;定义：.o文件可以在应用程序（加载到内存或）执行的时候动态的加载和链接进去。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;加载时间（load-time）链接：Linux通常情况下加载应用程序会使用此动态加载的方法。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QRoj&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QRoj.png&quot; alt=&quot;y6QRoj.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;运行时间（run-time）链接：可以在程序运行期间，自由选择任何时间link所需的.o文件，通过使用dlopen()接口&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Qgeg&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Qgeg.png&quot; alt=&quot;y6Qgeg.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Q2wQ&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Q2wQ.png&quot; alt=&quot;y6Q2wQ.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;总结&quot;&gt;总结&lt;/h3&gt;
+
+&lt;p&gt;链接可以发生在：程序编译完成（静态链接库），程序被加载到内存（动态链接库），程序运行时（动态链接库）&lt;/p&gt;
+
+&lt;h2 id=&quot;库打桩技术&quot;&gt;库打桩技术&lt;/h2&gt;
+
+&lt;p&gt;可以在complie time/ link-time/ Run-time三个阶段进行库打桩，前两个略，重点是动态链接库的库打桩技术&lt;/p&gt;
+
+&lt;p&gt;首先定义我们自己的mymalloc.c文件，然后生成.so文件，照常编译和链接main.o，但是在运行的时候加入一行命令行，让链接器首先在mymalloc.so这个共享库内解析符号，从而实现了我们自定义的的wraper函数，代替了系统自带的malloc函数。这样我们能够统计malloc地址等等。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QhYn&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QhYn.png&quot; alt=&quot;y6QhYn.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6QfFs&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6QfFs.png&quot; alt=&quot;y6QfFs.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Q4Wq&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Q4Wq.png&quot; alt=&quot;y6Q4Wq.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">链接 链接详解 静态链接例子 对于两个.c文件，如何形成可执行的目标文件呢？ 两个源代码分别经过预处理编译器，编译编译器，汇编编译器，生成了两个可重定向的目标文件，再经过链接器，链接成可执行目标文件。(在编译过程中需要指定两个.c文件) 链接器优势 模块化：程序是由许多小的源文件组成，而不是大的单一文件。并且能构建包含许多函数的库。 提高效率：节省时间：当修改源文件时，只需要重新编译那个修改的源文件，而不需要重新编译其他源文件。节省空间：公用的函数压缩成库，函数调用库时，只需要加载库中的某一些函数。 链接器的工作步骤 符号解析（简单解析） 程序能够定义和引用符号（全局变量或者函数） 这些符号（全局变量/函数）的定义在目标文件（.o)中以符号表的形式保存着，每一个符号对应着名称，大小，符号位置（以structs形式） 在符号解析阶段，链接器将每一个符号引用和其定义（名称，大小，符号位置）一一对应。 重定位阶段 目的是将分开储存的数据和代码组合成单一区域 重定位：由符号的相对位置，找到其绝对位置 更新符号引用中的位置为它们的绝对位置？？ 一些定义 三种目标文件（object files）（模块） 重定向目标文件（.o file）（汇编器生成的二进制文件）：不能直接加载当内存，需要等待链接器的链接，其中数据和代码以某种形式存储（ELF），每一个.o文件对应着一个源文件。 可运行目标文件（a.out file）能够直接加载到内存并运行 共享目标文件（.so file）（共享库）：特殊的重定向目标文件，能够在加载时间？？和运行时期动态的载入内存和动态链接，在windows中称为dll文件。 可执行可链接格式（ELF） 针对二进制目标文件（上面三种）的标准格式，所以上面三种文件又称为ELF二进制。 这种二进制文件的格式如下图所示：每一部分都有详细划分。 .bss文件储存未初始化的全局变量。 链接器符号/链接步骤 链接器符号 全局符号（global symbols)：在模块m中定义，并能被其他模块引用的符号，比如non-static 函数或者non-static 全局变量 外部符号（external symbols）：在模块m中被引用，在其他模块被定义的全局符号 局部符号（local symbols）：在模块m中定义，只能在模块m中引用的符号，比如static的函数和全局变量。 区分局部非静态变量和局部静态变量：local non-static存在stack上，local static存在.bss或者.data 强符号/或符号：强符号：过程/已经初始化的全局变量，弱符号：未初始化的全局变量，不允许多个同名强变量，但允许多个同名弱变量，会随机选择一个初始化。一定要避免弱变量，很容易出Bug 全局符号使用原则：尽可能static，尽可能初始化，尽可能声明external 链接步骤 符号解析：确定目标文件中的符号表 重定向 可以发现：重定向需要重新规划各个重定向目标文件的.text./data section的地址，从而组成可执行目标文件的.text和.data 可以发现：对于那些需要定位地址的部分，如array的地址和sum函数的地址，都用00000000代替，然后使用了relocation entry，这些entries可以帮助linker有足够的信息，组成可执行的目标文件（详细解释见教材，视频也没怎么讲） 可以发现：之前array和sum的地址确定了！（之前好像用的相对地址）然后main函数好像就是紧接在system code的后面。 这张图的困惑：1，为什么要多开8个字节的stack呢，明明callee个caller使用寄存器来共享数据呀 2，程序计数器（rpi）的相对地址是什么东西。 最后，可执行文件被加载到内存，如下图所示 上图针对linux系统，程序开始地址0x400000，有一段内存映射区域供共享库使用。 链接库 如何方便的使用那些常用的函数呢：方法1：把常用函数用单一的源文件存储，这样在linker会把一个很大的.o文件链接进去，时间空间成本高。方法2：把常用函数分别用源文件存储，程序员在编译时手动显式的链接要使用的.o文件，这样效率高，但增加程序员负担。 解决办法：把常用的函数打包形成链接库，在main.c文件中包含这些链接库，liner可以在链接库中找到所需的函数的.o文件，链接需要的.o文件 链接库按照链接的时间不同：分为静态链接库和动态链接库。 静态链接库 所有相关的.o文件重新排位后压缩到一个.a（archive file/档案文件）（AR：归档器）中，当liner发现了无法解析的符号时，会在一个或多个.o文件中查找，找到所需要的文件 可以发现：归档器（archiver)允许更新文件以及重新编译替换文件 可以发现：对象文件按字符串排列索引 链接过程：在所需要的归档文件中选择所需函数链接即可(.h文件存储了所需要的函数声明，然后链接器按照声明在归档文件中找到所需函数)（.h文件在cpp过程中被放在主代码部分形成.i文件，其实里面内容就是些全局对象的声明） 链接如下图所示： 编译指令如下： 可以发现：按照linker执行“解析符号”的顺序，不能把.a(即图中的-lmine)文件放在前面，不然无法解析.o文件中的符号。 静态链接库缺点：1，需要不断地复制libc中的函数，如果你的system libraries中有Bug，所有使用了该库的文件都需要重新显式relink。 动态链接库 定义：.o文件可以在应用程序（加载到内存或）执行的时候动态的加载和链接进去。 加载时间（load-time）链接：Linux通常情况下加载应用程序会使用此动态加载的方法。 运行时间（run-time）链接：可以在程序运行期间，自由选择任何时间link所需的.o文件，通过使用dlopen()接口 总结 链接可以发生在：程序编译完成（静态链接库），程序被加载到内存（动态链接库），程序运行时（动态链接库） 库打桩技术 可以在complie time/ link-time/ Run-time三个阶段进行库打桩，前两个略，重点是动态链接库的库打桩技术 首先定义我们自己的mymalloc.c文件，然后生成.so文件，照常编译和链接main.o，但是在运行的时候加入一行命令行，让链接器首先在mymalloc.so这个共享库内解析符号，从而实现了我们自定义的的wraper函数，代替了系统自带的malloc函数。这样我们能够统计malloc地址等等。</summary></entry><entry><title type="html">CSAPP笔记：高速缓存</title><link href="http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98.html" rel="alternate" type="text/html" title="CSAPP笔记：高速缓存" /><published>2020-03-18T14:16:00+08:00</published><updated>2020-03-18T14:16:00+08:00</updated><id>http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98</id><content type="html" xml:base="http://localhost:4000/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98.html">&lt;h1 id=&quot;高速缓存&quot;&gt;高速缓存&lt;/h1&gt;
+
+&lt;p&gt;性质：体积小速度快的SRAM组成，完全由硬件控制，集成在CPU芯片内，储存着经常被访问的来自主存（main memory）的块（blocks）。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MR8x&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MR8x.png&quot; alt=&quot;y6MR8x.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;结构：S,E,B，其中s表示有多少个sets，e表示每个set有多少Line，b表示每个block中需偏移几个字节才能找到目标bytes。总容量是S * E * B&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MW26&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MW26.png&quot; alt=&quot;y6MW26.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;如何在缓存中读取目标字节&quot;&gt;如何在缓存中读取目标字节：&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M6a9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M6a9.png&quot; alt=&quot;y6M6a9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;先确定在哪个set，然后根据tag确定在哪个Line，然后根据block offset确定字节位置。&lt;/p&gt;
+
+&lt;h3 id=&quot;直接映射缓存e--1&quot;&gt;直接映射缓存（E = 1)&lt;/h3&gt;
+
+&lt;p&gt;定义：每个set只有一行，当tag和当前set中的block.tag不复合（或者valid位为0），miss，此set.block被替换。&lt;/p&gt;
+
+&lt;p&gt;模拟：通过以下模拟可以发现当只有一行时，有相同set index的block会经常发生替换。（注意此处主存大小M是16字节怎么计算而来）&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M2P1&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M2P1.png&quot; alt=&quot;y6M2P1.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;e向关联缓存&quot;&gt;E向关联缓存&lt;/h3&gt;
+
+&lt;p&gt;定义：每一行set有多列（E&amp;gt;1),此时CPU会通过复杂的硬件，比较同一个set不同块的tag值，从而找到目标的block，目前能实现的最大E为16。&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;block的大小是一个平衡值，太大则无法储存多个block，太小则可能会经常替换block。&lt;/p&gt;
+
+  &lt;p&gt;如何知道一次是读4个字节还是两个字节呢？老师好像也不懂，应该由CPU根据类型是可以控制每次读的字节数字&lt;/p&gt;
+
+  &lt;p&gt;最常见的替换策略是:LRU，最少被使用的块现被替换掉&lt;/p&gt;
+
+  &lt;p&gt;read操作发生Miss，每次都是在发生Miss的快被替换&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6Mc5R&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6Mc5R.png&quot; alt=&quot;y6Mc5R.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以发现，同样的M,和缓存大小及地址值，但是t和s发生改变。&lt;/p&gt;
+
+&lt;h3 id=&quot;如何进行缓存写操作&quot;&gt;如何进行缓存写操作：&lt;/h3&gt;
+
+&lt;p&gt;1,缓存命中所写block：两种策略&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;直接写入（write-through）：修改缓存block，并直接更新memory&lt;/li&gt;
+  &lt;li&gt;回写（write back)：先修改缓存block，然后这个block被替换时，判断dirty bit（修改位），然后将修改后的block传给memory&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;2，缓存未命中所写block：两种策略&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;写-分配(write-allocate)：先把要修改的block加载到缓存在修改&lt;/li&gt;
+  &lt;li&gt;写-不分配(No- write-allocate)：直接在memory中修改数据&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;一般使用的是：Write-back + Write-allocate&lt;/p&gt;
+
+&lt;h3 id=&quot;缓存层次结构&quot;&gt;缓存层次结构&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MfxK&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MfxK.png&quot; alt=&quot;y6MfxK.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;缓存性能测试：&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;未命中率：一般非常低，比如L1级为3-10%，L2级不到1%&lt;/li&gt;
+  &lt;li&gt;命中时间：4-10 clock cycles&lt;/li&gt;
+  &lt;li&gt;未命中损失：50-200&lt;/li&gt;
+  &lt;li&gt;未命中损失很大，通常99%和97%命中率，性能差2倍&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;编写缓存友好的代码&quot;&gt;编写缓存友好的代码&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;让最常用的命令（内循环）能够快速访问&lt;/li&gt;
+  &lt;li&gt;需要1，在内循环中，把经常用的数据定义成局部变量，因为局部变量一般放在寄存器中。2，每次循环跨距为1，也可以提高局部性，从而增加命中率。比如跨距为1比跨距为2的命中率大2倍。&lt;/li&gt;
+  &lt;li&gt;通过对缓存的题解，可以量化我们的局部性。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;存储器山&quot;&gt;存储器山&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MTVH&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MTVH.png&quot; alt=&quot;y6MTVH.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;吞吐量（Read Throughput）：每秒钟能处理多少数据&lt;/p&gt;
+
+&lt;p&gt;Stride：步长，Size：数据量大小&lt;/p&gt;
+
+&lt;p&gt;可以发现当步长越小，数据量越小，吞吐量越大。&lt;/p&gt;
+
+&lt;h3 id=&quot;改变内层循环的空间局部性&quot;&gt;改变内层循环的空间局部性&lt;/h3&gt;
+
+&lt;p&gt;背景：对N*N的矩阵做内积，一共需要N^3次操作，具体代码如下：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M4KO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M4KO.png&quot; alt=&quot;y6M4KO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;一共有三层循环（ijk)，最内层循环需要访问矩阵A和矩阵B，其访问方式如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M5rD&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M5rD.png&quot; alt=&quot;y6M5rD.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;假设一个block只能存放四个double，则每一次循环，A的miss率为四分之一，而B的Miss率为百分之百，一共为1.25&lt;/p&gt;
+
+&lt;p&gt;当改变内层循环的数据访问方式，提高空间局部性，如下所示：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6MIqe&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6MIqe.png&quot; alt=&quot;y6MIqe.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;此时(kij)，miss rate降低，虽然此时在内层循环会增加write操作，（上面ijk的sum存在寄存器，不考虑write），但是通常来说，&lt;strong&gt;write操作对性能的影响更小&lt;/strong&gt;，因为write操作是可以延后处理的。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/y6M7ad&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/15/y6M7ad.png&quot; alt=&quot;y6M7ad.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;可以看到改变循环顺序，性能会发生很大的变化。&lt;/p&gt;
+
+&lt;h3 id=&quot;使用分块技术提高时间局部性&quot;&gt;使用分块技术提高时间局部性&lt;/h3&gt;
+
+&lt;p&gt;大致思路为，将程序中的数据结构组织成大的片（chunk），并能使一个片再加到L1，能够在这个片中进行所有的读写，完成后扔掉这个片。&lt;/p&gt;
+
+&lt;p&gt;分块会使程序变得难以理解。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">高速缓存 性质：体积小速度快的SRAM组成，完全由硬件控制，集成在CPU芯片内，储存着经常被访问的来自主存（main memory）的块（blocks）。 结构：S,E,B，其中s表示有多少个sets，e表示每个set有多少Line，b表示每个block中需偏移几个字节才能找到目标bytes。总容量是S * E * B 如何在缓存中读取目标字节： 先确定在哪个set，然后根据tag确定在哪个Line，然后根据block offset确定字节位置。 直接映射缓存（E = 1) 定义：每个set只有一行，当tag和当前set中的block.tag不复合（或者valid位为0），miss，此set.block被替换。 模拟：通过以下模拟可以发现当只有一行时，有相同set index的block会经常发生替换。（注意此处主存大小M是16字节怎么计算而来） E向关联缓存 定义：每一行set有多列（E&amp;gt;1),此时CPU会通过复杂的硬件，比较同一个set不同块的tag值，从而找到目标的block，目前能实现的最大E为16。 block的大小是一个平衡值，太大则无法储存多个block，太小则可能会经常替换block。 如何知道一次是读4个字节还是两个字节呢？老师好像也不懂，应该由CPU根据类型是可以控制每次读的字节数字 最常见的替换策略是:LRU，最少被使用的块现被替换掉 read操作发生Miss，每次都是在发生Miss的快被替换 可以发现，同样的M,和缓存大小及地址值，但是t和s发生改变。 如何进行缓存写操作： 1,缓存命中所写block：两种策略 直接写入（write-through）：修改缓存block，并直接更新memory 回写（write back)：先修改缓存block，然后这个block被替换时，判断dirty bit（修改位），然后将修改后的block传给memory 2，缓存未命中所写block：两种策略 写-分配(write-allocate)：先把要修改的block加载到缓存在修改 写-不分配(No- write-allocate)：直接在memory中修改数据 一般使用的是：Write-back + Write-allocate 缓存层次结构 缓存性能测试： 未命中率：一般非常低，比如L1级为3-10%，L2级不到1% 命中时间：4-10 clock cycles 未命中损失：50-200 未命中损失很大，通常99%和97%命中率，性能差2倍 编写缓存友好的代码 让最常用的命令（内循环）能够快速访问 需要1，在内循环中，把经常用的数据定义成局部变量，因为局部变量一般放在寄存器中。2，每次循环跨距为1，也可以提高局部性，从而增加命中率。比如跨距为1比跨距为2的命中率大2倍。 通过对缓存的题解，可以量化我们的局部性。 存储器山 吞吐量（Read Throughput）：每秒钟能处理多少数据 Stride：步长，Size：数据量大小 可以发现当步长越小，数据量越小，吞吐量越大。 改变内层循环的空间局部性 背景：对N*N的矩阵做内积，一共需要N^3次操作，具体代码如下： 一共有三层循环（ijk)，最内层循环需要访问矩阵A和矩阵B，其访问方式如下所示： 假设一个block只能存放四个double，则每一次循环，A的miss率为四分之一，而B的Miss率为百分之百，一共为1.25 当改变内层循环的数据访问方式，提高空间局部性，如下所示： 此时(kij)，miss rate降低，虽然此时在内层循环会增加write操作，（上面ijk的sum存在寄存器，不考虑write），但是通常来说，write操作对性能的影响更小，因为write操作是可以延后处理的。 可以看到改变循环顺序，性能会发生很大的变化。 使用分块技术提高时间局部性 大致思路为，将程序中的数据结构组织成大的片（chunk），并能使一个片再加到L1，能够在这个片中进行所有的读写，完成后扔掉这个片。 分块会使程序变得难以理解。</summary></entry><entry><title type="html">CSAPP笔记：存储器层次结构</title><link href="http://localhost:4000/%E5%AD%98%E5%82%A8%E5%99%A8%E5%B1%82%E6%AC%A1%E7%BB%93%E6%9E%84.html" rel="alternate" type="text/html" title="CSAPP笔记：存储器层次结构" /><published>2020-03-11T08:03:00+08:00</published><updated>2020-03-11T08:03:00+08:00</updated><id>http://localhost:4000/%E5%AD%98%E5%82%A8%E5%99%A8%E5%B1%82%E6%AC%A1%E7%BB%93%E6%9E%84</id><content type="html" xml:base="http://localhost:4000/%E5%AD%98%E5%82%A8%E5%99%A8%E5%B1%82%E6%AC%A1%E7%BB%93%E6%9E%84.html">&lt;h1 id=&quot;存储器层次结构&quot;&gt;存储器层次结构&lt;/h1&gt;
+
+&lt;h2 id=&quot;存储技术及趋势&quot;&gt;存储技术及趋势&lt;/h2&gt;
+
+&lt;h3 id=&quot;随机存储器ram&quot;&gt;随机存储器（RAM）&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;特点：封装成芯片，多个RAM芯片组成内存，以每个比特为一个单位。&lt;/li&gt;
+  &lt;li&gt;种类：静态RAM（SRAM）和动态存储器（DRAM），其中SRAM的成本高，速度快，只要有电就可以永久保持值，不需刷新，常用作缓存。DRAM的成本低，速度慢，需要经常刷新（充电）.&lt;/li&gt;
+  &lt;li&gt;属于易失性存储器，断电会丢失信息&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;只读存储器rom&quot;&gt;只读存储器（ROM）&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;其实可以写（再编程）很多次，由于历史原因一直被叫做只读存储器&lt;/li&gt;
+  &lt;li&gt;EPROM：可擦写可编程ROM，可以重新编程1000次&lt;/li&gt;
+  &lt;li&gt;闪存：也是非易失性存储器，基于EPROM&lt;/li&gt;
+  &lt;li&gt;SSD：固态硬盘，基于缓存的磁盘驱动器，比传统磁盘更快&lt;/li&gt;
+  &lt;li&gt;固件：（firmware)，存储在ROM上的程序，如BIOS，驱动控制器等&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;总线结构bus-strcture连接cpu和主存&quot;&gt;总线结构（BUS STRCTURE）连接CPU和主存&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTrl9&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTrl9.png&quot; alt=&quot;ysTrl9.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;主存读取（read）&lt;/p&gt;
+
+    &lt;p&gt;包括：1，CPU将想要读取数据的地址传给主存。2，主存根据此地址获得所需数据，放在总线上传输3。，CPU从总线上读取数据，放入寄存器。&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;主存存储（write）&lt;/p&gt;
+
+    &lt;p&gt;包括：1，CPU将想要存储的地址传到主存，主存知道了A处地址将要写入数据并等待数据传入。2，CPU将数据放在总线上。3，主存从总线上读取数据，写入到A。&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;由此可见，从主存中读取或写入数据都很耗时，大约是用寄存器操作数据的100多倍时间。&lt;/p&gt;
+
+&lt;h3 id=&quot;磁盘&quot;&gt;磁盘&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;几何结构：包括盘片（platters）（双面），磁道（tracks），柱面，扇区（sectors），间隙（gaps)等&lt;/li&gt;
+  &lt;li&gt;容量：取决于记录密度（每个扇区能记录多少数据）和磁道密度。以前每个磁道的扇区数量相同，造成空间浪费，现在将磁盘分成不同的记录区域（recording zone），每个zone的扇区密度和磁道密度都不同。&lt;/li&gt;
+  &lt;li&gt;如何在磁盘上读取数据：磁盘逆时针旋转，通过磁头（读/写头）在不同磁道的表面读写数据&lt;/li&gt;
+  &lt;li&gt;磁盘读取速度：寻道时间+旋转等待时间+数据传输时间，由磁盘旋转速度（7200RPM）寻道速度（最慢）加上平均扇区读写时间&lt;/li&gt;
+  &lt;li&gt;磁盘速度很慢，比SRAM慢40000倍，比DRAM慢2500倍。&lt;/li&gt;
+  &lt;li&gt;对CPU来说，磁盘相当于连续的逻辑单元，将所需的逻辑单元号传给磁盘控制器（disk controller），可确定具体盘面，磁道，扇区在哪。&lt;/li&gt;
+  &lt;li&gt;磁盘的格式容量（可用容量）比最大物理容量小，因为有些柱面预留给损害了的柱面备用。&lt;/li&gt;
+  &lt;li&gt;I/0 总线（bus）：之前的PCI总线是广播总线，在总线上传入一个值，所有设备都能获取到。现代总线称为PCI express总线，点对点传输，速度更快。&lt;/li&gt;
+  &lt;li&gt;CPU读取磁盘过程：1，传入三元信号（指令，逻辑单元号，目标内存地址）给磁盘控制器。2，磁盘控制器读取扇区数据，直接传给主存（DMA）（direct memory access）。3，当DMA完成后，磁盘给CPU一个中断信号，表示已经完成读取。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;ssd&quot;&gt;SSD&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;在CPU看来和磁盘完全相同，都是连续的逻辑单元。&lt;/li&gt;
+  &lt;li&gt;读取速度比写入速度快，因为写入时，只能整块数据（不是logical blocks）被擦除后再写入。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTWFO&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTWFO.png&quot; alt=&quot;ysTWFO.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;在1985-2003年，制造商靠增加时钟频率来提高CPU速度，但是遇到功率瓶颈，发热量过大，在03年后靠增加核心数，提高速度。&lt;/p&gt;
+
+  &lt;p&gt;DRAM/SSD等与CPU的差距越来越大。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;利用&lt;strong&gt;局部性&lt;/strong&gt;解决CPU/内存间性能差距。&lt;/p&gt;
+
+&lt;h2 id=&quot;局部性&quot;&gt;局部性&lt;/h2&gt;
+
+&lt;p&gt;定义：程序趋向于使用它们最近访问过的地址附近的，数据或指令。&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;两种局部性：时间局部性（某一个指令或数据被访问过后，之后很可能再被访问）空间局部性（可能访问某个指令或数据的周围指令）&lt;/li&gt;
+  &lt;li&gt;学会分辨哪些程序有良好的局部性。（heapsort不具备局部性）&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;缓存在储存结构中的体现&quot;&gt;缓存在储存结构中的体现&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTcex&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTcex.png&quot; alt=&quot;ysTcex.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;越往顶部，容量越小，速度越快，单字节造价越高&lt;/li&gt;
+  &lt;li&gt;Lk级是Lk+1级的缓存&lt;/li&gt;
+  &lt;li&gt;缓存：使用速度更快，容量更小的存储设备来暂存大容量设备的一部分数据。&lt;/li&gt;
+  &lt;li&gt;设计此存储结构的原因：利用程序的局部性，程序更有可能使用Lk级的数据而不是Lk+1级。&lt;/li&gt;
+  &lt;li&gt;优点：能够以接近底部存储的造价获得空间，并以接近顶部存储设备的速度为程序提供数据。&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTsyR&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTsyR.png&quot; alt=&quot;ysTsyR.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;数据按块的形式（block-sized）的形式利用传输单元在设备间传输。&lt;/li&gt;
+  &lt;li&gt;缓存命中：所需数据刚好在缓存中&lt;/li&gt;
+  &lt;li&gt;缓存不命中：缓存区没有我们所需要的block&lt;/li&gt;
+  &lt;li&gt;缓存不命中的类型：1，cold miss：因为刚开始的时候缓存是没有数据的，所以刚开始一定会出现miss。2，Capacity miss：由于所需的工作Block数量超过了缓存区的容量，造成不命中。3，冲突不命中/conflict miss：由于缓存映射方式（放置算法）的限制，来自Lk+1级的块只能通过算法放在Lk级的某一小块位置，从而造成了某一小块位置不断被置换（或者叫evict/驱逐）。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/ysTyO1&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/14/ysTyO1.png&quot; alt=&quot;ysTyO1.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">存储器层次结构 存储技术及趋势 随机存储器（RAM） 特点：封装成芯片，多个RAM芯片组成内存，以每个比特为一个单位。 种类：静态RAM（SRAM）和动态存储器（DRAM），其中SRAM的成本高，速度快，只要有电就可以永久保持值，不需刷新，常用作缓存。DRAM的成本低，速度慢，需要经常刷新（充电）. 属于易失性存储器，断电会丢失信息 只读存储器（ROM） 其实可以写（再编程）很多次，由于历史原因一直被叫做只读存储器 EPROM：可擦写可编程ROM，可以重新编程1000次 闪存：也是非易失性存储器，基于EPROM SSD：固态硬盘，基于缓存的磁盘驱动器，比传统磁盘更快 固件：（firmware)，存储在ROM上的程序，如BIOS，驱动控制器等 总线结构（BUS STRCTURE）连接CPU和主存 主存读取（read） 包括：1，CPU将想要读取数据的地址传给主存。2，主存根据此地址获得所需数据，放在总线上传输3。，CPU从总线上读取数据，放入寄存器。 主存存储（write） 包括：1，CPU将想要存储的地址传到主存，主存知道了A处地址将要写入数据并等待数据传入。2，CPU将数据放在总线上。3，主存从总线上读取数据，写入到A。 由此可见，从主存中读取或写入数据都很耗时，大约是用寄存器操作数据的100多倍时间。 磁盘 几何结构：包括盘片（platters）（双面），磁道（tracks），柱面，扇区（sectors），间隙（gaps)等 容量：取决于记录密度（每个扇区能记录多少数据）和磁道密度。以前每个磁道的扇区数量相同，造成空间浪费，现在将磁盘分成不同的记录区域（recording zone），每个zone的扇区密度和磁道密度都不同。 如何在磁盘上读取数据：磁盘逆时针旋转，通过磁头（读/写头）在不同磁道的表面读写数据 磁盘读取速度：寻道时间+旋转等待时间+数据传输时间，由磁盘旋转速度（7200RPM）寻道速度（最慢）加上平均扇区读写时间 磁盘速度很慢，比SRAM慢40000倍，比DRAM慢2500倍。 对CPU来说，磁盘相当于连续的逻辑单元，将所需的逻辑单元号传给磁盘控制器（disk controller），可确定具体盘面，磁道，扇区在哪。 磁盘的格式容量（可用容量）比最大物理容量小，因为有些柱面预留给损害了的柱面备用。 I/0 总线（bus）：之前的PCI总线是广播总线，在总线上传入一个值，所有设备都能获取到。现代总线称为PCI express总线，点对点传输，速度更快。 CPU读取磁盘过程：1，传入三元信号（指令，逻辑单元号，目标内存地址）给磁盘控制器。2，磁盘控制器读取扇区数据，直接传给主存（DMA）（direct memory access）。3，当DMA完成后，磁盘给CPU一个中断信号，表示已经完成读取。 SSD 在CPU看来和磁盘完全相同，都是连续的逻辑单元。 读取速度比写入速度快，因为写入时，只能整块数据（不是logical blocks）被擦除后再写入。 在1985-2003年，制造商靠增加时钟频率来提高CPU速度，但是遇到功率瓶颈，发热量过大，在03年后靠增加核心数，提高速度。 DRAM/SSD等与CPU的差距越来越大。 利用局部性解决CPU/内存间性能差距。 局部性 定义：程序趋向于使用它们最近访问过的地址附近的，数据或指令。 两种局部性：时间局部性（某一个指令或数据被访问过后，之后很可能再被访问）空间局部性（可能访问某个指令或数据的周围指令） 学会分辨哪些程序有良好的局部性。（heapsort不具备局部性） 缓存在储存结构中的体现 越往顶部，容量越小，速度越快，单字节造价越高 Lk级是Lk+1级的缓存 缓存：使用速度更快，容量更小的存储设备来暂存大容量设备的一部分数据。 设计此存储结构的原因：利用程序的局部性，程序更有可能使用Lk级的数据而不是Lk+1级。 优点：能够以接近底部存储的造价获得空间，并以接近顶部存储设备的速度为程序提供数据。 数据按块的形式（block-sized）的形式利用传输单元在设备间传输。 缓存命中：所需数据刚好在缓存中 缓存不命中：缓存区没有我们所需要的block 缓存不命中的类型：1，cold miss：因为刚开始的时候缓存是没有数据的，所以刚开始一定会出现miss。2，Capacity miss：由于所需的工作Block数量超过了缓存区的容量，造成不命中。3，冲突不命中/conflict miss：由于缓存映射方式（放置算法）的限制，来自Lk+1级的块只能通过算法放在Lk级的某一小块位置，从而造成了某一小块位置不断被置换（或者叫evict/驱逐）。</summary></entry><entry><title type="html">CSAPP笔记：程序优化</title><link href="http://localhost:4000/csapp%E7%AC%94%E8%AE%B0-%E7%A8%8B%E5%BA%8F%E4%BC%98%E5%8C%96.html" rel="alternate" type="text/html" title="CSAPP笔记：程序优化" /><published>2020-03-05T08:00:00+08:00</published><updated>2020-03-05T08:00:00+08:00</updated><id>http://localhost:4000/CSAPP%E7%AC%94%E8%AE%B0:%E7%A8%8B%E5%BA%8F%E4%BC%98%E5%8C%96</id><content type="html" xml:base="http://localhost:4000/csapp%E7%AC%94%E8%AE%B0-%E7%A8%8B%E5%BA%8F%E4%BC%98%E5%8C%96.html">&lt;h1 id=&quot;程序优化常数级别优化&quot;&gt;程序优化（常数级别优化）&lt;/h1&gt;
+&lt;h2 id=&quot;引言&quot;&gt;引言&lt;/h2&gt;
+&lt;ul&gt;
+  &lt;li&gt;不涉及算法优化，有时候常数级别复杂度也可以优化性能&lt;/li&gt;
+  &lt;li&gt;目的：写出编译器友好的代码&lt;/li&gt;
+  &lt;li&gt;可针对通用机器优化，也可以针对特定机型机型优化&lt;/li&gt;
+  &lt;li&gt;使用汇编不一定能使程序变得更快，汇编可以用于一些算力优先的场景&lt;/li&gt;
+  &lt;li&gt;gcc编译器对于大多数情况性能已经足够好&lt;/li&gt;
+  &lt;li&gt;编译器优化的一些限制条件：1,当存疑时，编译器选择不优化。2，一般只在单个procedure中优化（最新版的GCC可以interprocedual，仅限于单个文件）3，编译器只对静态信息优化。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;编译器常用优化手段&quot;&gt;编译器常用优化手段&lt;/h2&gt;
+&lt;ol&gt;
+  &lt;li&gt;代码移动/代码预先计算：将循环中需要反复重复计算的相同表达式提取到循环外，用局部变量存储，从而减少计算次数&lt;/li&gt;
+  &lt;li&gt;减少计算量：乘法-&amp;gt;加法，乘法-&amp;gt;移位，因为乘法需三个CPU cycles&lt;/li&gt;
+  &lt;li&gt;公用公共子表达式：减少计算量&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;编译器优化阻碍&quot;&gt;编译器优化阻碍&lt;/h2&gt;
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;不能对函数调用进行优化（procedure calls）&lt;/p&gt;
+
+    &lt;p&gt;编译器对待procedure就像黑盒子一样&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;void lower(char *s)
+{
+    size_t i;
+    for(i = 0; i &amp;lt; strlen(s)); i++)
+        if(s[i] &amp;gt;= 'A' &amp;amp;&amp;amp; s[i] &amp;lt;= 'Z')
+            s[i] -= ('A' - 'a');
+}
+//可以发现多次对strlen函数进行重复调用，但是GCC不会对此进行优化
+//O(n^2)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;内存别名（Memory Aliasing）
+&lt;strong&gt;别名&lt;/strong&gt;：两个不同的内存引用，指向同一个地方
+别名的存在，可能会增加&lt;strong&gt;内存访问次数&lt;/strong&gt;（用来保存变量），所以要养成使用局部变量的习惯。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;探究机器级指令的并发性&quot;&gt;探究机器级指令的并发性&lt;/h2&gt;
+&lt;p&gt;定义如下数据类型和基准计算，尝试优化代码&lt;/p&gt;
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/* data strcutre for vectors */&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;strcut&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;data_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; 
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vec&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;cm&quot;&gt;/* retrieve vector element and store at val */&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;get_vec_element&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vec&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;idx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;val&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idx&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;len&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;val&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;idx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;cm&quot;&gt;/* Benchmark Compuatation */&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;combinel&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;vec_ptr&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;long&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dest&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;IDENT&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;vec_length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;){&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;val&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;get_vec_element&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;v&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;val&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+        &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dest&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dest&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;val&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*
+OP/IDENT 都是宏（macros），可以为加法或乘法，
+data_t可以为多种类型如int,long,double等
+*/&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;未优化的写法：如上所示，每次取元素时都要进行边界检测&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;基本优化法：只进行一次取元素：取指向vec首元素的指针，然后进行指针运算，即可遍历vec，减少了调用procedures的次数&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;现代CPU设计：可以一次性读取多条机器指令（Instruction cache），判断指令间的相关性，对相互间不影响的指令可以同时执行，从而达到一个机器周期能执行多条指令的目的，称为&lt;strong&gt;超标量指令处理器&lt;/strong&gt;（Superscalar processor)&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;流水线型（pipeline)功能单元：乘法操作需要三个机器周期，分成stage1,stage2,stage3，但是在运算stage2时，可以让乘法单元的stage1进行新一轮的乘法操作，这样乘法单元的三个stage能尽可能繁忙，减少运行时间。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Haswell CPU一共有8个功能单元：包括2个加载单元，一个存储单元，4个整数单元，2个浮点乘，一个浮点加，一个浮点除。&lt;/p&gt;
+
+  &lt;p&gt;每个算数运算所需时间可以由延迟（latency），发射时间（issue time），容量（capacity）描述，其中延迟表示一个计算单元计算一次所需时间，发射时间表示计算单元进行一次新的加载（or发射）需要几个机器周期，容量表示处理该运算的运算单元有几个。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;循环展开优化法：将循环体内部的单次运算编程可以并行(or pipeline)的多次计算，使得一个机器周期尽可能计算多的计算。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;//未展开:不能进行pipeline&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;//2*1展开:也不能pipeline，计算顺序没有变化&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;//2*1a展开：可以pipeline,运行时间减半&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;//2*2展开：pipeline，与上面方法类似,two independent streams of operations.&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;x0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x0&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;x1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x1&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OP&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;d&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;使用向量指令优化：向量指令可以使一次机器循环执行多个操作，基于YMM寄存器（32位/64位），向量化编程主要用在声音，图像处理，视频等浮点数领域。&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;优化对比：&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yUgu0f&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/08/yUgu0f.png&quot; alt=&quot;yUgu0f.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中Integer的吞吐量因为只有两个加载单元，限制为0.5而不是0.25.&lt;/p&gt;
+
+&lt;h2 id=&quot;避免难以预测的分支判断&quot;&gt;避免难以预测的分支判断&lt;/h2&gt;
+
+&lt;p&gt;现代处理器设计图：&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://imgchr.com/i/yUgK78&quot;&gt;&lt;img src=&quot;https://s3.ax1x.com/2021/02/08/yUgK78.png&quot; alt=&quot;yUgK78.png&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;其中需要对条件分支进行prediction，由于运算出来的寄存器结果都存在register file（寄存器缓存中），每个寄存器可能都缓存了之前几百次计算结果，当prediction出现错误后，需要返回将寄存器都返回到某一状态，从而造成时间浪费。&lt;/p&gt;</content><author><name>tie</name></author><category term="操作系统" /><summary type="html">程序优化（常数级别优化） 引言 不涉及算法优化，有时候常数级别复杂度也可以优化性能 目的：写出编译器友好的代码 可针对通用机器优化，也可以针对特定机型机型优化 使用汇编不一定能使程序变得更快，汇编可以用于一些算力优先的场景 gcc编译器对于大多数情况性能已经足够好 编译器优化的一些限制条件：1,当存疑时，编译器选择不优化。2，一般只在单个procedure中优化（最新版的GCC可以interprocedual，仅限于单个文件）3，编译器只对静态信息优化。 编译器常用优化手段 代码移动/代码预先计算：将循环中需要反复重复计算的相同表达式提取到循环外，用局部变量存储，从而减少计算次数 减少计算量：乘法-&amp;gt;加法，乘法-&amp;gt;移位，因为乘法需三个CPU cycles 公用公共子表达式：减少计算量 编译器优化阻碍 不能对函数调用进行优化（procedure calls） 编译器对待procedure就像黑盒子一样 void lower(char *s) { size_t i; for(i = 0; i &amp;lt; strlen(s)); i++) if(s[i] &amp;gt;= 'A' &amp;amp;&amp;amp; s[i] &amp;lt;= 'Z') s[i] -= ('A' - 'a'); } //可以发现多次对strlen函数进行重复调用，但是GCC不会对此进行优化 //O(n^2) 内存别名（Memory Aliasing） 别名：两个不同的内存引用，指向同一个地方 别名的存在，可能会增加内存访问次数（用来保存变量），所以要养成使用局部变量的习惯。 探究机器级指令的并发性 定义如下数据类型和基准计算，尝试优化代码 /* data strcutre for vectors */ typedef strcut{ size_t len; data_t *data; }vec; /* retrieve vector element and store at val */ int get_vec_element(*vec v, size_t idx, data_t *val) { if(idx &amp;gt;= v-&amp;gt;len) return 0; *val = v-&amp;gt;data[idx]; return 1; } /* Benchmark Compuatation */ void combinel(vec_ptr v, data_t *dest) { long int i; *dest = IDENT; for(i = 0; i &amp;lt; vec_length(v); i++){ data_t val; get_vec_element(v,i,&amp;amp;val); *dest = *dest OP val; } } /* OP/IDENT 都是宏（macros），可以为加法或乘法， data_t可以为多种类型如int,long,double等 */ 未优化的写法：如上所示，每次取元素时都要进行边界检测 基本优化法：只进行一次取元素：取指向vec首元素的指针，然后进行指针运算，即可遍历vec，减少了调用procedures的次数 现代CPU设计：可以一次性读取多条机器指令（Instruction cache），判断指令间的相关性，对相互间不影响的指令可以同时执行，从而达到一个机器周期能执行多条指令的目的，称为超标量指令处理器（Superscalar processor) 流水线型（pipeline)功能单元：乘法操作需要三个机器周期，分成stage1,stage2,stage3，但是在运算stage2时，可以让乘法单元的stage1进行新一轮的乘法操作，这样乘法单元的三个stage能尽可能繁忙，减少运行时间。 Haswell CPU一共有8个功能单元：包括2个加载单元，一个存储单元，4个整数单元，2个浮点乘，一个浮点加，一个浮点除。 每个算数运算所需时间可以由延迟（latency），发射时间（issue time），容量（capacity）描述，其中延迟表示一个计算单元计算一次所需时间，发射时间表示计算单元进行一次新的加载（or发射）需要几个机器周期，容量表示处理该运算的运算单元有几个。 循环展开优化法：将循环体内部的单次运算编程可以并行(or pipeline)的多次计算，使得一个机器周期尽可能计算多的计算。 //未展开:不能进行pipeline t = t OP d[i]; //2*1展开:也不能pipeline，计算顺序没有变化 t = (t OP d[i]) OP d[i+1]; //2*1a展开：可以pipeline,运行时间减半 t = t OP (d[i] OP d[i+1]); //2*2展开：pipeline，与上面方法类似,two independent streams of operations. x0 = x0 OP d[i]; x1 = x1 OP d[i+1]; 使用向量指令优化：向量指令可以使一次机器循环执行多个操作，基于YMM寄存器（32位/64位），向量化编程主要用在声音，图像处理，视频等浮点数领域。 优化对比： 其中Integer的吞吐量因为只有两个加载单元，限制为0.5而不是0.25. 避免难以预测的分支判断 现代处理器设计图： 其中需要对条件分支进行prediction，由于运算出来的寄存器结果都存在register file（寄存器缓存中），每个寄存器可能都缓存了之前几百次计算结果，当prediction出现错误后，需要返回将寄存器都返回到某一状态，从而造成时间浪费。</summary></entry><entry><title type="html">Post Example With Hr</title><link href="http://localhost:4000/hr-example.html" rel="alternate" type="text/html" title="Post Example With Hr" /><published>2019-07-09T00:00:00+08:00</published><updated>2019-07-09T00:00:00+08:00</updated><id>http://localhost:4000/hr%20example</id><content type="html" xml:base="http://localhost:4000/hr-example.html">&lt;p&gt;Lorem ipsum&lt;sup id=&quot;fnref:1&quot;&gt;&lt;a href=&quot;#fn:1&quot; class=&quot;footnote&quot;&gt;1&lt;/a&gt;&lt;/sup&gt; dolor sit amet, consectetur adipiscing elit. Pellentesque vel lacinia neque. Praesent nulla quam, ullamcorper in sollicitudin ac, molestie sed justo. Cras aliquam, sapien id consectetur accumsan, augue magna faucibus ex, ut ultricies turpis tortor vel ante. In at rutrum tellus. Nullam vestibulum metus eu purus malesuada, volutpat mattis leo facilisis. Sed consectetur, nisl et semper laoreet, velit augue congue nunc, eget eleifend odio erat eu sapien. Phasellus dictum efficitur dapibus. Morbi porta lacinia tincidunt. Nam aliquet est mi, nec lacinia ipsum elementum sed. Nam feugiat ipsum tortor, et pretium purus sollicitudin et.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Mauris viverra dictum ultricies&lt;sup id=&quot;fnref:2&quot;&gt;&lt;a href=&quot;#fn:2&quot; class=&quot;footnote&quot;&gt;2&lt;/a&gt;&lt;/sup&gt;. Vestibulum&lt;sup id=&quot;fnref:3&quot;&gt;&lt;a href=&quot;#fn:3&quot; class=&quot;footnote&quot;&gt;3&lt;/a&gt;&lt;/sup&gt; quis ipsum euismod, facilisis metus sed, varius ipsum. Donec scelerisque lacus libero, eu dignissim sem venenatis at. Nunc a egestas tortor, sed feugiat leo. Vestibulum porta tincidunt tellus, vitae ornare tortor. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Sed nunc neque, tempor in iaculis non, faucibus et metus. Etiam id nisl ut lorem gravida euismod.&lt;/p&gt;
+
+&lt;p&gt;Fusce non velit cursus ligula mattis convallis vel at metus. Sed pharetra tellus massa, non elementum eros vulputate non. Suspendisse potenti. Quisque arcu felis, laoreet vel accumsan sit amet, fermentum at nunc. Sed massa quam, auctor in eros quis, porttitor tincidunt orci. Nulla convallis id sapien ornare viverra. Cras nec est lacinia ligula porta tincidunt. Nam a est eget ligula pellentesque posuere. Maecenas quis enim ac risus accumsan scelerisque. Aliquam vitae libero sapien. Etiam convallis, metus nec suscipit condimentum, quam massa congue velit, sit amet sollicitudin nisi tortor a lectus. Cras a arcu enim. Suspendisse hendrerit euismod est ac gravida. Donec vitae elit tristique, suscipit eros at, aliquam augue. In ac faucibus dui. Sed tempor lacus tristique elit sagittis, vitae tempor massa convallis.&lt;/p&gt;
+
+&lt;hr data-content=&quot;discussions&quot; /&gt;
+
+&lt;p&gt;This article has been discussed here:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;#&quot;&gt;lobste.rs&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;#&quot;&gt;/r/webdev&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Feel free to reach out at my email to leave feedback and talk about the article.&lt;/p&gt;
+
+&lt;hr data-content=&quot;footnotes&quot; /&gt;
+
+&lt;div class=&quot;footnotes&quot;&gt;
+  &lt;ol&gt;
+    &lt;li id=&quot;fn:1&quot;&gt;
+      &lt;p&gt;Okay here I should put something about “ipsum”. &lt;a href=&quot;#fnref:1&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+    &lt;/li&gt;
+    &lt;li id=&quot;fn:2&quot;&gt;
+      &lt;p&gt;same goes for this. &lt;a href=&quot;#fnref:2&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+    &lt;/li&gt;
+    &lt;li id=&quot;fn:3&quot;&gt;
+      &lt;p&gt;I studied latin in high school but im not able to translate &lt;em&gt;anything&lt;/em&gt;! By the way this is a longer footnote and i think it is still pretty cool, even prettier than shortier ones even though it does not say anything useful but whatever. &lt;a href=&quot;#fnref:3&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+    &lt;/li&gt;
+  &lt;/ol&gt;
+&lt;/div&gt;</content><author><name>zhangtie</name></author><summary type="html">Lorem ipsum1 dolor sit amet, consectetur adipiscing elit. Pellentesque vel lacinia neque. Praesent nulla quam, ullamcorper in sollicitudin ac, molestie sed justo. Cras aliquam, sapien id consectetur accumsan, augue magna faucibus ex, ut ultricies turpis tortor vel ante. In at rutrum tellus. Nullam vestibulum metus eu purus malesuada, volutpat mattis leo facilisis. Sed consectetur, nisl et semper laoreet, velit augue congue nunc, eget eleifend odio erat eu sapien. Phasellus dictum efficitur dapibus. Morbi porta lacinia tincidunt. Nam aliquet est mi, nec lacinia ipsum elementum sed. Nam feugiat ipsum tortor, et pretium purus sollicitudin et. Okay here I should put something about “ipsum”. &amp;#8617;</summary></entry></feed>
